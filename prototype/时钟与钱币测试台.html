@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <link rel="icon" href="data:,">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>物志 · 时钟与钱币测试台</title>
+  <style>
+    * { box-sizing:border-box }
+    body { margin:0; background:#f8f6ee; color:#263c30; font:16px/1.6 system-ui,"Microsoft YaHei",sans-serif }
+    main { max-width:720px; margin:auto; padding:32px 20px }
+    h1,h2 { font-family:"Songti SC",SimSun,serif; margin:0 }
+    h1 {font-size:clamp(26px,5vw,38px)}
+    section { border-top:1px solid #b6c0aa; margin-top:24px; padding-top:16px }
+    .value { font-size:clamp(26px,6vw,42px); font-variant-numeric:tabular-nums }
+    .actions { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin:12px 0 }
+    button,select { font:inherit; color:inherit; background:#fffdf5; border:1px solid #9fae9d; border-radius:4px; padding:5px 10px }
+    button {cursor:pointer} p {margin:6px 0;color:#526453}
+  </style>
+</head>
+<body><main>
+  <h1>物志 · 时钟与钱币测试台</h1>
+  <p>本页模拟时间和余额，刷新后重新开始。</p>
+  <section><h2>游戏时钟</h2>
+    <div id="clock" class="value"></div>
+    <p id="status"></p>
+    <div class="actions">
+      <label>流速 <select id="speed"><option value="1">1×</option><option value="5">5×</option><option value="20">20×</option></select></label>
+      <button id="pause">暂停</button>
+      <button id="hour">前进 1 游戏小时</button><button id="next">前进至次日早晨</button>
+    </div>
+    <p>每日 06:00 开始。正常流速下，18 分钟走完一天。</p>
+    <p id="boundaries"></p>
+  </section>
+  <section><h2>测试钱币</h2><div class="value" id="balance" aria-live="polite">0 文</div>
+    <div class="actions"><button data-money="100">增加 100 文</button><button data-money="1000">增加 1,000 文</button></div>
+  </section>
+</main>
+<script>
+  const dayLength = 1080;
+  const display = id => document.getElementById(id);
+  let elapsed = 0, balance = 0, dayEvents = 0, paused = false, speed = 1;
+  let lastFrame = performance.now();
+  let foreground = document.visibilityState === 'visible' && document.hasFocus();
+
+  function advance(minutes) {
+    const previousDay = Math.floor(elapsed / dayLength);
+    elapsed += minutes;
+    const day = Math.floor(elapsed / dayLength);
+    dayEvents += day - previousDay;
+    showTime();
+  }
+
+  function showTime() {
+    const minute = Math.floor(elapsed % dayLength) + 360;
+    const hh = String(Math.floor(minute / 60)).padStart(2, '0');
+    const mm = String(minute % 60).padStart(2, '0');
+    const label = '第 ' + (1 + Math.floor(elapsed / dayLength)) + ' 天 · ' + hh + ':' + mm;
+    if (display('clock').textContent !== label) {
+      display('clock').textContent = label;
+      display('boundaries').textContent = '已触发换日 ' + dayEvents + ' 次';
+    }
+  }
+
+  function tick(now) {
+    const delta = Math.max(0,Math.min(250, now - lastFrame));
+    lastFrame = now;
+    if (foreground && !paused) advance(delta / 1000 * speed);
+  }
+
+  function showStatus() {
+    display('status').textContent = !foreground ? '页面未激活，时间静止' : paused ? '已暂停，可手动步进' : '时间流动中 · ' + speed + '×';
+    display('pause').textContent = paused ? '继续' : '暂停';
+    display('pause').setAttribute('aria-pressed',String(paused));
+  }
+
+  function syncFocus() {
+    foreground = document.visibilityState === 'visible' && document.hasFocus();
+    lastFrame = performance.now();
+    showStatus();
+  }
+  for (const event of ['focus','blur','pageshow']) window.addEventListener(event,syncFocus);
+  document.addEventListener('visibilitychange',syncFocus);
+  display('speed').onchange = event => { tick(performance.now()); speed = Number(event.target.value); showStatus(); };
+  display('pause').onclick = () => { tick(performance.now()); paused = !paused; showStatus(); };
+  display('hour').onclick = () => { if (foreground) { tick(performance.now()); advance(60); } };
+  display('next').onclick = () => { if (foreground) { tick(performance.now()); advance(dayLength - elapsed % dayLength); } };
+  for (const button of document.querySelectorAll('[data-money]')) button.onclick = () => {
+    balance += Number(button.dataset.money);
+    display('balance').textContent = balance.toLocaleString('zh-CN') + ' 文';
+  };
+  function frame(now) { tick(now); requestAnimationFrame(frame); }
+  showTime(); showStatus(); requestAnimationFrame(frame);
+</script></body></html>
