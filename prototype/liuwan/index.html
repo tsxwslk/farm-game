@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f1ede0">
+  <title>柳湾 · 物志</title>
+  <link rel="stylesheet" href="style.css">
+  <script defer src="map.js"></script>
+  <script defer src="render.js"></script>
+  <script defer src="game.js"></script>
+</head>
+<body>
+  <main class="shell">
+    <header class="masthead">
+      <div class="title"><span class="stamp">物志</span><h1>柳湾</h1></div>
+      <div class="date"><span aria-hidden="true">☀</span><time id="clock">春 · 第 1 天　06:00</time></div>
+    </header>
+    <div class="workspace">
+      <section class="landscape" aria-label="柳湾地图">
+        <div class="map-frame">
+          <canvas id="scene" aria-label="水彩地图，点击地面或使用方向键移动"></canvas>
+          <div class="map-top">
+            <div class="layouts" aria-label="地图布局">
+              <button type="button" data-layout="farm" aria-pressed="true">田埂</button>
+              <button type="button" data-layout="bend" aria-pressed="false">河弯</button>
+            </div>
+            <button type="button" id="edit" aria-pressed="false">编辑地块</button>
+          </div>
+          <div id="markers" class="markers"></div>
+          <div id="review" class="review" hidden>
+            <div class="review-paper">
+              <h2 id="review-title">日结</h2>
+              <p id="review-summary"></p>
+              <button type="button" class="primary" id="dawn">进入次日</button>
+            </div>
+          </div>
+        </div>
+        <div class="map-bottom">
+          <p id="status" aria-live="polite">点击地面移动，或从右边选一个目的地。</p>
+          <span id="mode-help">WASD / 方向键移动</span>
+        </div>
+        <div id="palette" class="palette" hidden>
+          <span>选择地块后点击地图</span>
+          <button type="button" data-brush="grass" aria-pressed="true">草地</button>
+          <button type="button" data-brush="path" aria-pressed="false">土路</button>
+          <button type="button" data-brush="soil" aria-pressed="false">可耕土</button>
+          <button type="button" data-brush="water" aria-pressed="false">水面</button>
+        </div>
+      </section>
+      <aside class="fieldbook">
+        <section>
+          <h2>去哪里</h2>
+          <div class="destinations" id="destinations"></div>
+        </section>
+        <section>
+          <h2>手边的事</h2>
+          <p id="nearby">先走到菜畦、磨坊、栈桥或矿点。</p>
+          <button type="button" class="primary" id="action" hidden></button>
+        </section>
+        <section>
+          <h2>背包</h2>
+          <dl id="stock"></dl>
+        </section>
+        <button type="button" id="dusk">推进到午夜</button>
+      </aside>
+    </div>
+  </main>
+</body>
+</html>
