@@ -1,0 +1,40 @@
+{
+  "cottage": {
+    "file": "assets/depth/cottage.png",
+    "width": 128,
+    "height": 104,
+    "anchor": [
+      64,
+      94
+    ]
+  },
+  "shadows": {
+    "cabbage": {
+      "file": "assets/depth/cabbage-shadow.png",
+      "anchor": [
+        6,
+        1
+      ],
+      "width": 43,
+      "height": 15
+    },
+    "figure": {
+      "file": "assets/depth/figure-shadow.png",
+      "anchor": [
+        8,
+        2
+      ],
+      "width": 50,
+      "height": 21
+    },
+    "cottage": {
+      "file": "assets/depth/cottage-shadow.png",
+      "anchor": [
+        31,
+        4
+      ],
+      "width": 117,
+      "height": 37
+    }
+  }
+}

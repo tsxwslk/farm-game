@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#f3f0e5">
+  <title>柳湾 · 光影田畦</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="scene.css">
+  <script defer src="ground-assets.js"></script>
+  <script defer src="ground-engine.js"></script>
+  <script defer src="ground-painter.js"></script>
+  <script defer src="depth-assets.js"></script>
+  <script defer src="scene.js"></script>
+</head>
+<body>
+  <main id="depth-lab">
+    <header><div><p class="eyebrow">物志 / 农场视觉样板</p><h1>柳湾<span>河畔青绿 · 光影田畦</span></h1></div></header>
+    <div class="toolbar">
+      <div class="control-group"><button id="depth-crops" type="button" aria-pressed="true">显示白菜</button><button id="depth-person" type="button" aria-pressed="false">人物站到田里</button><label for="moisture">耕地</label><select id="moisture"><option value="mixed">局部干湿</option><option value="dry">全部干土</option><option value="wet">全部湿土</option></select></div>
+      <div class="control-group"><label for="depth-zoom">倍率</label><select id="depth-zoom"><option value="1">1 倍</option><option value="2" selected>2 倍</option></select></div>
+    </div>
+    <div id="depth-stage" class="depth-stage"><canvas id="depth-scene" width="448" height="384" role="img" aria-label="光影田畦农场：白菜、人物、小屋、土路与右侧河水"></canvas></div>
+    <div id="depth-pan-row" class="depth-pan-row" hidden><label for="depth-pan">左右查看</label><input id="depth-pan" type="range" min="0" max="100" value="50" aria-label="左右移动场景视野"></div>
+    <div class="scene-caption"><p id="depth-status" role="status">正在加载场景…</p><span id="depth-scale"></span></div>
+    <section class="depth-notes"><h2>光影与田畦</h2><p>左上光源，右下投影，田畦保留薄土壁。可切换人物站位检查遮挡，或隐藏作物观察干湿土。</p><p>人物与小屋为比例占位，目前是视觉样板，尚未接入种植、生长、移动和存档。</p></section>
+    <footer><span>基础地格 32×32 · 种植单元 64×64</span><span>白菜 48×72 · 田畦厚度 4 像素</span></footer>
+  </main>
+</body>
+</html>
