@@ -40,8 +40,6 @@
   const pointCell = point => [Math.floor(point.x/tile), Math.floor(point.y/tile)];
   const neighbors = [[1,0],[-1,0],[0,1],[0,-1]];
   const landImage = document.createElement('canvas');
-  landImage.width = columns * tile;
-  landImage.height = rows * tile;
 
   function newMap(key) {
     const layout = layouts[key];
@@ -128,7 +126,7 @@
     const keys = [...Object.values(terrain),'grass_short',...edges,...spriteNames];
     return Object.fromEntries(await Promise.all(keys.map(async key => {
       const image = new Image();
-      image.src = 'assets/'+key+'.webp';
+      image.src = 'assets/'+key+'.png';
       await image.decode();
       return [key,image];
     })));
@@ -223,13 +221,19 @@
     }
   }
 
-  function bake(world,art) {
+  function bake(world,art,density) {
+    const width=columns*tile;
+    const height=rows*tile;
+    landImage.width=Math.ceil(width*density);
+    landImage.height=Math.ceil(height*density);
     const ctx=landImage.getContext('2d');
+    ctx.setTransform(landImage.width/width,0,0,landImage.height/height,0,0);
+    ctx.imageSmoothingQuality='high';
     const grass=art[terrain.grass];
     const grassPattern=ctx.createPattern(grass,'repeat');
     grassPattern.setTransform(new DOMMatrix().scale(130/grass.width));
     ctx.fillStyle=grassPattern;
-    ctx.fillRect(0,0,landImage.width,landImage.height);
+    ctx.fillRect(0,0,width,height);
     for (const [name,scale] of [['soil',100],['tilled',128]]) {
       material(ctx,world,art,name,scale);
     }

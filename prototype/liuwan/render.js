@@ -1,5 +1,5 @@
 (() => {
-  const {tile,columns,rows,center,landImage,pointCell,inside,id} = window.LiuwanMap;
+  const {tile,columns,rows,center,landImage,bake,inside,id} = window.LiuwanMap;
   const canvas = document.getElementById('scene');
   const ctx = canvas.getContext('2d', {alpha:false});
   const markers = document.getElementById('markers');
@@ -7,6 +7,11 @@
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
   let world;
   let markerNodes = [];
+  let terrainDensity = 0;
+
+  function invalidateTerrain() {
+    terrainDensity=0;
+  }
 
   function resize() {
     camera.width=canvas.clientWidth;
@@ -15,12 +20,14 @@
     camera.scale=Math.max(camera.width/1060,camera.height/780,.62);
     canvas.width=Math.ceil(camera.width*camera.pixels);
     canvas.height=Math.ceil(camera.height*camera.pixels);
+    ctx.imageSmoothingQuality='high';
   }
   new ResizeObserver(resize).observe(canvas);
   resize();
 
   function setMap(next) {
     world=next;
+    invalidateTerrain();
     markerNodes=world.sites.map(site => {
       const marker=document.createElement('button');
       marker.type='button';
@@ -106,8 +113,13 @@
     if (!world || !canvas.width) return;
     follow(state.player,instant);
     const scale=camera.scale*camera.pixels;
+    const density=Math.max(1,Math.ceil(scale*4)/4);
+    if (density!==terrainDensity) {
+      bake(world,art,density);
+      terrainDensity=density;
+    }
     ctx.setTransform(scale,0,0,scale,-camera.x*scale,-camera.y*scale);
-    ctx.drawImage(landImage,0,0);
+    ctx.drawImage(landImage,0,0,columns*tile,rows*tile);
     const motionTime=reducedMotion.matches ? 0 : state.time;
     shimmer(motionTime);
     if (state.route.length) {
@@ -186,5 +198,5 @@
     }
   }
 
-  window.LiuwanRenderer = {canvas,markers,screenPoint,setMap,frame};
+  window.LiuwanRenderer = {canvas,markers,screenPoint,setMap,invalidateTerrain,frame};
 })();

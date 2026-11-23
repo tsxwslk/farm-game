@@ -1,5 +1,5 @@
 (() => {
-  const {tile,id,inside,center,pointCell,newMap,passable,pathTo,loadArt,bake} = window.LiuwanMap;
+  const {id,inside,center,pointCell,newMap,passable,pathTo,loadArt} = window.LiuwanMap;
   const renderer=window.LiuwanRenderer;
   const el=name=>document.getElementById(name);
   const status=message=>{el('status').textContent=message;};
@@ -45,7 +45,6 @@
     pending=null;
     keys.clear();
     hover=null;
-    bake(world,art);
     renderer.setMap(world);
     renderer.frame(art,{...state,editing,hover},true);
     destinations.replaceChildren(...world.sites.map(site=>{
@@ -120,7 +119,7 @@
       world.cells[key]='tilled';
       world.crops.set(key,{cell,plantedAt:state.time});
       updateStock();
-      bake(world,art);
+      renderer.invalidateTerrain();
       status('小白菜已种下，去河边时它也会继续长。');
     }
     updateHud();
@@ -182,7 +181,7 @@
     }
     if (world.cells[index]===brush) return;
     world.cells[index]=brush;
-    bake(world,art);
+    renderer.invalidateTerrain();
     status('地块已更新。退出编辑后试着走一走。');
   }
 
