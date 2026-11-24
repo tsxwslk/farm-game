@@ -1,23 +1,28 @@
 {
   "cottage": {
-    "file": "assets/depth/cottage.png",
+    "file": "assets/house/house-cottage-128x104.png",
     "width": 128,
     "height": 104,
     "anchor": [
       64,
-      94
+      96
+    ]
+  },
+  "crate": {
+    "file": "assets/crate/crate-harvest-48x48.png",
+    "anchor": [
+      24,
+      44
+    ]
+  },
+  "jar": {
+    "file": "assets/jar/jar-crock-48x48.png",
+    "anchor": [
+      24,
+      44
     ]
   },
   "shadows": {
-    "cabbage": {
-      "file": "assets/depth/cabbage-shadow.png",
-      "anchor": [
-        6,
-        1
-      ],
-      "width": 43,
-      "height": 15
-    },
     "figure": {
       "file": "assets/depth/figure-shadow.png",
       "anchor": [
@@ -30,11 +35,29 @@
     "cottage": {
       "file": "assets/depth/cottage-shadow.png",
       "anchor": [
-        31,
-        4
+        37,
+        5
       ],
-      "width": 117,
-      "height": 37
+      "width": 132,
+      "height": 38
+    },
+    "crate": {
+      "file": "assets/depth/crate-shadow.png",
+      "anchor": [
+        11,
+        2
+      ],
+      "width": 35,
+      "height": 11
+    },
+    "jar": {
+      "file": "assets/depth/jar-shadow.png",
+      "anchor": [
+        7,
+        2
+      ],
+      "width": 35,
+      "height": 13
     }
   }
 }

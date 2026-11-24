@@ -1,0 +1,293 @@
+{
+  "variants": [
+    {
+      "kind": "rock",
+      "name": "0",
+      "bbox": [
+        10,
+        22,
+        38,
+        44
+      ],
+      "bbox_size": [
+        29,
+        23
+      ],
+      "area": 515,
+      "center_offset": 0.5,
+      "anchor": [
+        24,
+        44
+      ],
+      "contact": {
+        "row": 44,
+        "runs": [
+          [
+            14,
+            35
+          ]
+        ],
+        "pixels": 22
+      },
+      "rock_pixels": 515,
+      "crystal_pixels": 0,
+      "crystal_ratio": 0.0,
+      "crystal_on_edge": 0,
+      "colors_used": 5,
+      "lone_pixels": 0,
+      "mirror_breaks": 39,
+      "alpha_values": [
+        0,
+        255
+      ]
+    },
+    {
+      "kind": "rock",
+      "name": "1",
+      "bbox": [
+        10,
+        22,
+        37,
+        44
+      ],
+      "bbox_size": [
+        28,
+        23
+      ],
+      "area": 494,
+      "center_offset": 0.0,
+      "anchor": [
+        24,
+        44
+      ],
+      "contact": {
+        "row": 44,
+        "runs": [
+          [
+            14,
+            32
+          ]
+        ],
+        "pixels": 19
+      },
+      "rock_pixels": 494,
+      "crystal_pixels": 0,
+      "crystal_ratio": 0.0,
+      "crystal_on_edge": 0,
+      "colors_used": 5,
+      "lone_pixels": 0,
+      "mirror_breaks": 26,
+      "alpha_values": [
+        0,
+        255
+      ]
+    },
+    {
+      "kind": "rock",
+      "name": "2",
+      "bbox": [
+        9,
+        21,
+        38,
+        44
+      ],
+      "bbox_size": [
+        30,
+        24
+      ],
+      "area": 517,
+      "center_offset": 0.0,
+      "anchor": [
+        24,
+        44
+      ],
+      "contact": {
+        "row": 44,
+        "runs": [
+          [
+            12,
+            32
+          ]
+        ],
+        "pixels": 21
+      },
+      "rock_pixels": 517,
+      "crystal_pixels": 0,
+      "crystal_ratio": 0.0,
+      "crystal_on_edge": 0,
+      "colors_used": 5,
+      "lone_pixels": 0,
+      "mirror_breaks": 41,
+      "alpha_values": [
+        0,
+        255
+      ]
+    },
+    {
+      "kind": "ore",
+      "name": "emerald",
+      "bbox": [
+        9,
+        21,
+        38,
+        44
+      ],
+      "bbox_size": [
+        30,
+        24
+      ],
+      "area": 559,
+      "center_offset": 0.0,
+      "anchor": [
+        24,
+        44
+      ],
+      "contact": {
+        "row": 44,
+        "runs": [
+          [
+            14,
+            35
+          ]
+        ],
+        "pixels": 22
+      },
+      "rock_pixels": 418,
+      "crystal_pixels": 141,
+      "crystal_ratio": 0.2522,
+      "crystal_on_edge": 46,
+      "colors_used": 10,
+      "lone_pixels": 0,
+      "mirror_breaks": 45,
+      "alpha_values": [
+        0,
+        255
+      ]
+    },
+    {
+      "kind": "ore",
+      "name": "aquamarine",
+      "bbox": [
+        10,
+        20,
+        38,
+        44
+      ],
+      "bbox_size": [
+        29,
+        25
+      ],
+      "area": 543,
+      "center_offset": 0.5,
+      "anchor": [
+        24,
+        44
+      ],
+      "contact": {
+        "row": 44,
+        "runs": [
+          [
+            14,
+            35
+          ]
+        ],
+        "pixels": 22
+      },
+      "rock_pixels": 414,
+      "crystal_pixels": 129,
+      "crystal_ratio": 0.2376,
+      "crystal_on_edge": 36,
+      "colors_used": 8,
+      "lone_pixels": 0,
+      "mirror_breaks": 41,
+      "alpha_values": [
+        0,
+        255
+      ]
+    },
+    {
+      "kind": "ore",
+      "name": "salt",
+      "bbox": [
+        10,
+        20,
+        37,
+        44
+      ],
+      "bbox_size": [
+        28,
+        25
+      ],
+      "area": 516,
+      "center_offset": 0.0,
+      "anchor": [
+        24,
+        44
+      ],
+      "contact": {
+        "row": 44,
+        "runs": [
+          [
+            14,
+            32
+          ]
+        ],
+        "pixels": 19
+      },
+      "rock_pixels": 390,
+      "crystal_pixels": 126,
+      "crystal_ratio": 0.2442,
+      "crystal_on_edge": 28,
+      "colors_used": 9,
+      "lone_pixels": 0,
+      "mirror_breaks": 30,
+      "alpha_values": [
+        0,
+        255
+      ]
+    }
+  ],
+  "rock_palette": {
+    "hi": "#7E6952",
+    "light": "#66523E",
+    "mid": "#4E3E32",
+    "dark": "#3A2D26",
+    "line": "#291D19"
+  },
+  "mineral_palettes": {
+    "emerald": {
+      "hi": "#C6FBD2",
+      "lit": "#4BD97C",
+      "mid": "#1E9B4E",
+      "dark": "#0A4B2A",
+      "line": "#06341D"
+    },
+    "aquamarine": {
+      "hi": "#CCF8FD",
+      "lit": "#5AD3E8",
+      "mid": "#23A0C0",
+      "dark": "#10566B",
+      "line": "#0A3746"
+    },
+    "salt": {
+      "hi": "#FFFFFF",
+      "lit": "#F2DECF",
+      "mid": "#CDA89A",
+      "dark": "#8E6A61",
+      "line": "#6B4F49"
+    }
+  },
+  "structure": {
+    "canvas": "48×48，透明底",
+    "view": "侧视微俯：整块石头，左上受光，底边平贴",
+    "anchor": [
+      24,
+      44
+    ],
+    "bottom_row": 44,
+    "shading": "按离轮廓步数分三层 + 左上受光面；晶簇同法，外圈最暗"
+  },
+  "checks": [
+    "全部通过"
+  ]
+}

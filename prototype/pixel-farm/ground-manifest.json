@@ -1,45 +1,4 @@
 {
-  "tile": 32,
-  "variants": 4,
-  "materials": [
-    "grass",
-    "bare",
-    "path",
-    "dry",
-    "wet"
-  ],
-  "themes": {
-    "riverside": {
-      "name": "河畔青绿",
-      "description": "柔和灰绿草地，搭配温暖棕土。",
-      "grass": [
-        "#a4b57e",
-        "#b0bf8c",
-        "#94a66f"
-      ],
-      "bare": [
-        "#c7ae85",
-        "#d1ba93",
-        "#b7a07b"
-      ],
-      "path": [
-        "#dfcba5",
-        "#ead8b6",
-        "#ceb993"
-      ],
-      "dry": [
-        "#a17b59",
-        "#b18b67",
-        "#866448"
-      ],
-      "wet": [
-        "#745b47",
-        "#876b51",
-        "#5e4b3d"
-      ],
-      "file": "assets/ground/riverside-atlas.png"
-    }
-  },
   "figure": {
     "file": "assets/ground/figure.png",
     "width": 40,

@@ -1,0 +1,637 @@
+{
+  "tile": 32,
+  "variants": 4,
+  "bands": 8,
+  "band_px": 4,
+  "view": "固定俯视微倾，左上受光",
+  "materials": {
+    "dry": {
+      "palette": {
+        "base": "#a9652c",
+        "light": "#c07c3b",
+        "dark": "#8a4d24"
+      },
+      "variants": [
+        {
+          "file": "assets/tilled/tilled-dry-0.png",
+          "size": [
+            32,
+            32
+          ],
+          "palette_locked": true,
+          "colors": {
+            "#a9652c": 808,
+            "#c07c3b": 145,
+            "#8a4d24": 71
+          },
+          "light_ratio": 0.142,
+          "dark_ratio": 0.069,
+          "mean_lum": 116.28,
+          "corner_lum": {
+            "tl": 116.08,
+            "tr": 116.74,
+            "bl": 115.51,
+            "br": 116.79,
+            "center": 117.14
+          },
+          "lum_spread": 1.28,
+          "seam_delta": {
+            "wrap_x": 1.45,
+            "wrap_y": 9.8,
+            "inner_max": 24.27
+          },
+          "band_share": [
+            {
+              "y": 0,
+              "light": 0.186,
+              "dark": 0.127
+            },
+            {
+              "y": 4,
+              "light": 0.152,
+              "dark": 0.127
+            },
+            {
+              "y": 8,
+              "light": 0.083,
+              "dark": 0.099
+            },
+            {
+              "y": 12,
+              "light": 0.097,
+              "dark": 0.141
+            },
+            {
+              "y": 16,
+              "light": 0.103,
+              "dark": 0.141
+            },
+            {
+              "y": 20,
+              "light": 0.117,
+              "dark": 0.127
+            },
+            {
+              "y": 24,
+              "light": 0.117,
+              "dark": 0.099
+            },
+            {
+              "y": 28,
+              "light": 0.145,
+              "dark": 0.141
+            }
+          ]
+        },
+        {
+          "file": "assets/tilled/tilled-dry-1.png",
+          "size": [
+            32,
+            32
+          ],
+          "palette_locked": true,
+          "colors": {
+            "#a9652c": 801,
+            "#c07c3b": 147,
+            "#8a4d24": 76
+          },
+          "light_ratio": 0.144,
+          "dark_ratio": 0.074,
+          "mean_lum": 116.2,
+          "corner_lum": {
+            "tl": 115.03,
+            "tr": 116.81,
+            "bl": 115.91,
+            "br": 117.07,
+            "center": 116.13
+          },
+          "lum_spread": 2.04,
+          "seam_delta": {
+            "wrap_x": 2.21,
+            "wrap_y": 7.11,
+            "inner_max": 46.36
+          },
+          "band_share": [
+            {
+              "y": 0,
+              "light": 0.116,
+              "dark": 0.132
+            },
+            {
+              "y": 4,
+              "light": 0.116,
+              "dark": 0.092
+            },
+            {
+              "y": 8,
+              "light": 0.129,
+              "dark": 0.132
+            },
+            {
+              "y": 12,
+              "light": 0.102,
+              "dark": 0.158
+            },
+            {
+              "y": 16,
+              "light": 0.19,
+              "dark": 0.132
+            },
+            {
+              "y": 20,
+              "light": 0.116,
+              "dark": 0.079
+            },
+            {
+              "y": 24,
+              "light": 0.109,
+              "dark": 0.158
+            },
+            {
+              "y": 28,
+              "light": 0.122,
+              "dark": 0.118
+            }
+          ]
+        },
+        {
+          "file": "assets/tilled/tilled-dry-2.png",
+          "size": [
+            32,
+            32
+          ],
+          "palette_locked": true,
+          "colors": {
+            "#a9652c": 818,
+            "#c07c3b": 135,
+            "#8a4d24": 71
+          },
+          "light_ratio": 0.132,
+          "dark_ratio": 0.069,
+          "mean_lum": 116.06,
+          "corner_lum": {
+            "tl": 115.95,
+            "tr": 115.92,
+            "bl": 117.1,
+            "br": 115.28,
+            "center": 115.75
+          },
+          "lum_spread": 1.82,
+          "seam_delta": {
+            "wrap_x": 2.07,
+            "wrap_y": 7.18,
+            "inner_max": 46.36
+          },
+          "band_share": [
+            {
+              "y": 0,
+              "light": 0.104,
+              "dark": 0.155
+            },
+            {
+              "y": 4,
+              "light": 0.156,
+              "dark": 0.113
+            },
+            {
+              "y": 8,
+              "light": 0.089,
+              "dark": 0.113
+            },
+            {
+              "y": 12,
+              "light": 0.126,
+              "dark": 0.113
+            },
+            {
+              "y": 16,
+              "light": 0.141,
+              "dark": 0.141
+            },
+            {
+              "y": 20,
+              "light": 0.119,
+              "dark": 0.127
+            },
+            {
+              "y": 24,
+              "light": 0.148,
+              "dark": 0.113
+            },
+            {
+              "y": 28,
+              "light": 0.119,
+              "dark": 0.127
+            }
+          ]
+        },
+        {
+          "file": "assets/tilled/tilled-dry-3.png",
+          "size": [
+            32,
+            32
+          ],
+          "palette_locked": true,
+          "colors": {
+            "#a9652c": 812,
+            "#c07c3b": 142,
+            "#8a4d24": 70
+          },
+          "light_ratio": 0.139,
+          "dark_ratio": 0.068,
+          "mean_lum": 116.24,
+          "corner_lum": {
+            "tl": 115.74,
+            "tr": 116.98,
+            "bl": 117.31,
+            "br": 114.92,
+            "center": 116.64
+          },
+          "lum_spread": 2.39,
+          "seam_delta": {
+            "wrap_x": 2.9,
+            "wrap_y": 9.87,
+            "inner_max": 46.36
+          },
+          "band_share": [
+            {
+              "y": 0,
+              "light": 0.169,
+              "dark": 0.143
+            },
+            {
+              "y": 4,
+              "light": 0.134,
+              "dark": 0.114
+            },
+            {
+              "y": 8,
+              "light": 0.113,
+              "dark": 0.129
+            },
+            {
+              "y": 12,
+              "light": 0.12,
+              "dark": 0.143
+            },
+            {
+              "y": 16,
+              "light": 0.127,
+              "dark": 0.057
+            },
+            {
+              "y": 20,
+              "light": 0.099,
+              "dark": 0.157
+            },
+            {
+              "y": 24,
+              "light": 0.106,
+              "dark": 0.157
+            },
+            {
+              "y": 28,
+              "light": 0.134,
+              "dark": 0.1
+            }
+          ]
+        }
+      ],
+      "note": "干耕地：日晒土脊 + 浅沟，明度低于金橙裸土，衬托作物",
+      "atlas": "assets/tilled/tilled-dry-atlas.png"
+    },
+    "wet": {
+      "palette": {
+        "base": "#6d4630",
+        "light": "#82573b",
+        "dark": "#573622"
+      },
+      "variants": [
+        {
+          "file": "assets/tilled/tilled-wet-0.png",
+          "size": [
+            32,
+            32
+          ],
+          "palette_locked": true,
+          "colors": {
+            "#6d4630": 808,
+            "#82573b": 145,
+            "#573622": 71
+          },
+          "light_ratio": 0.142,
+          "dark_ratio": 0.069,
+          "mean_lum": 80.41,
+          "corner_lum": {
+            "tl": 80.24,
+            "tr": 80.79,
+            "bl": 79.83,
+            "br": 80.79,
+            "center": 81.07
+          },
+          "lum_spread": 0.96,
+          "seam_delta": {
+            "wrap_x": 1.1,
+            "wrap_y": 7.66,
+            "inner_max": 17.57
+          },
+          "band_share": [
+            {
+              "y": 0,
+              "light": 0.186,
+              "dark": 0.127
+            },
+            {
+              "y": 4,
+              "light": 0.152,
+              "dark": 0.127
+            },
+            {
+              "y": 8,
+              "light": 0.083,
+              "dark": 0.099
+            },
+            {
+              "y": 12,
+              "light": 0.097,
+              "dark": 0.141
+            },
+            {
+              "y": 16,
+              "light": 0.103,
+              "dark": 0.141
+            },
+            {
+              "y": 20,
+              "light": 0.117,
+              "dark": 0.127
+            },
+            {
+              "y": 24,
+              "light": 0.117,
+              "dark": 0.099
+            },
+            {
+              "y": 28,
+              "light": 0.145,
+              "dark": 0.141
+            }
+          ]
+        },
+        {
+          "file": "assets/tilled/tilled-wet-1.png",
+          "size": [
+            32,
+            32
+          ],
+          "palette_locked": true,
+          "colors": {
+            "#6d4630": 801,
+            "#82573b": 147,
+            "#573622": 76
+          },
+          "light_ratio": 0.144,
+          "dark_ratio": 0.074,
+          "mean_lum": 80.36,
+          "corner_lum": {
+            "tl": 79.42,
+            "tr": 80.86,
+            "bl": 80.17,
+            "br": 81.0,
+            "center": 80.31
+          },
+          "lum_spread": 1.58,
+          "seam_delta": {
+            "wrap_x": 1.65,
+            "wrap_y": 5.48,
+            "inner_max": 35.08
+          },
+          "band_share": [
+            {
+              "y": 0,
+              "light": 0.116,
+              "dark": 0.132
+            },
+            {
+              "y": 4,
+              "light": 0.116,
+              "dark": 0.092
+            },
+            {
+              "y": 8,
+              "light": 0.129,
+              "dark": 0.132
+            },
+            {
+              "y": 12,
+              "light": 0.102,
+              "dark": 0.158
+            },
+            {
+              "y": 16,
+              "light": 0.19,
+              "dark": 0.132
+            },
+            {
+              "y": 20,
+              "light": 0.116,
+              "dark": 0.079
+            },
+            {
+              "y": 24,
+              "light": 0.109,
+              "dark": 0.158
+            },
+            {
+              "y": 28,
+              "light": 0.122,
+              "dark": 0.118
+            }
+          ]
+        },
+        {
+          "file": "assets/tilled/tilled-wet-2.png",
+          "size": [
+            32,
+            32
+          ],
+          "palette_locked": true,
+          "colors": {
+            "#6d4630": 818,
+            "#82573b": 135,
+            "#573622": 71
+          },
+          "light_ratio": 0.132,
+          "dark_ratio": 0.069,
+          "mean_lum": 80.24,
+          "corner_lum": {
+            "tl": 80.17,
+            "tr": 80.11,
+            "bl": 81.06,
+            "br": 79.63,
+            "center": 80.04
+          },
+          "lum_spread": 1.43,
+          "seam_delta": {
+            "wrap_x": 1.64,
+            "wrap_y": 5.48,
+            "inner_max": 35.08
+          },
+          "band_share": [
+            {
+              "y": 0,
+              "light": 0.104,
+              "dark": 0.155
+            },
+            {
+              "y": 4,
+              "light": 0.156,
+              "dark": 0.113
+            },
+            {
+              "y": 8,
+              "light": 0.089,
+              "dark": 0.113
+            },
+            {
+              "y": 12,
+              "light": 0.126,
+              "dark": 0.113
+            },
+            {
+              "y": 16,
+              "light": 0.141,
+              "dark": 0.141
+            },
+            {
+              "y": 20,
+              "light": 0.119,
+              "dark": 0.127
+            },
+            {
+              "y": 24,
+              "light": 0.148,
+              "dark": 0.113
+            },
+            {
+              "y": 28,
+              "light": 0.119,
+              "dark": 0.127
+            }
+          ]
+        },
+        {
+          "file": "assets/tilled/tilled-wet-3.png",
+          "size": [
+            32,
+            32
+          ],
+          "palette_locked": true,
+          "colors": {
+            "#6d4630": 812,
+            "#82573b": 142,
+            "#573622": 70
+          },
+          "light_ratio": 0.139,
+          "dark_ratio": 0.068,
+          "mean_lum": 80.38,
+          "corner_lum": {
+            "tl": 80.04,
+            "tr": 80.93,
+            "bl": 81.2,
+            "br": 79.35,
+            "center": 80.66
+          },
+          "lum_spread": 1.85,
+          "seam_delta": {
+            "wrap_x": 2.19,
+            "wrap_y": 7.67,
+            "inner_max": 35.08
+          },
+          "band_share": [
+            {
+              "y": 0,
+              "light": 0.169,
+              "dark": 0.143
+            },
+            {
+              "y": 4,
+              "light": 0.134,
+              "dark": 0.114
+            },
+            {
+              "y": 8,
+              "light": 0.113,
+              "dark": 0.129
+            },
+            {
+              "y": 12,
+              "light": 0.12,
+              "dark": 0.143
+            },
+            {
+              "y": 16,
+              "light": 0.127,
+              "dark": 0.057
+            },
+            {
+              "y": 20,
+              "light": 0.099,
+              "dark": 0.157
+            },
+            {
+              "y": 24,
+              "light": 0.106,
+              "dark": 0.157
+            },
+            {
+              "y": 28,
+              "light": 0.134,
+              "dark": 0.1
+            }
+          ]
+        }
+      ],
+      "note": "湿耕地：以干土角色图为底，只换色板并压低亮度，脊与沟位置不变",
+      "atlas": "assets/tilled/tilled-wet-atlas.png"
+    }
+  },
+  "checks": {
+    "palette_locked": true,
+    "dry_wet_same_structure": "4/4",
+    "mean_lum": {
+      "bare_soil": 181.1,
+      "tilled_dry": 116.2,
+      "tilled_wet": 80.3
+    },
+    "bands": "8 条带，每条 4 像素高；带的上半放浅赭、下半放深棕",
+    "edge": {
+      "lift": 4,
+      "note": "边缘不进静态纹理，由运行时按邻居掩码合成；上沿亮唇、左右轮廓线、前侧 4 像素土壁 + 碎石 + 落地投影",
+      "palette": {
+        "dry": {
+          "lip": "#de9e56",
+          "line": "#7c4420",
+          "wall": "#754a24",
+          "gravel": "#b87c42",
+          "shadow": "#3345322e"
+        },
+        "wet": {
+          "lip": "#8f6446",
+          "line": "#573622",
+          "wall": "#503322",
+          "gravel": "#7e5a3e",
+          "shadow": "#3345322e"
+        }
+      },
+      "scene_hook": "scene.js:39 bedSides / scene.js:49 bedLip / scene.js:7 BED_HEIGHT"
+    },
+    "outputs": [
+      "../../output/art-previews/tilled/tilled-seam-check-6x.png",
+      "../../output/art-previews/tilled/tilled-dry-wet-8x.png",
+      "../../output/art-previews/tilled/tilled-dry-wet-field-3x.png",
+      "../../output/art-previews/tilled/tilled-bed-edge-4x.png",
+      "../../output/art-previews/tilled/tilled-contrast-grass-4x.png"
+    ]
+  }
+}

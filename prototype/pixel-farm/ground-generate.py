@@ -1,4 +1,4 @@
-"""Native 32px terrain textures and a proportion placeholder, Python + Pillow.
+"""Native player placeholder and optional legacy 32px terrains, Python + Pillow.
 
 Run from the repo root: python prototype/pixel-farm/ground-generate.py
 The browser composes edges from neighbor masks; these textures have no borders.
@@ -6,6 +6,7 @@ The browser composes edges from neighbor masks; these textures have no borders.
 from pathlib import Path
 import json
 import random
+import sys
 from PIL import Image, ImageDraw
 
 ROOT = Path(__file__).resolve().parent
@@ -83,23 +84,32 @@ def figure():
     return im
 
 
-def main():
-    OUT.mkdir(parents=True, exist_ok=True)
-    catalog = {'tile': 32, 'variants': 4, 'materials': MATERIALS, 'themes': {}}
+def legacy_terrain():
+    archive = ROOT.parents[1] / 'output' / 'archived-art' / 'riverside'
+    archive.mkdir(parents=True, exist_ok=True)
     for key, theme in THEMES.items():
         atlas = Image.new('RGBA', (128, 160))
         for row, material in enumerate(MATERIALS):
             for variant in range(4):
-                im = texture(material, theme[material], variant)
-                im.save(OUT / f'{key}-{material}-{variant}.png', optimize=True)
-                atlas.alpha_composite(im, (variant*32, row*32))
-        atlas.save(OUT / f'{key}-atlas.png', optimize=True)
-        catalog['themes'][key] = {**theme, 'file': f'assets/ground/{key}-atlas.png'}
+                image = texture(material, theme[material], variant)
+                image.save(archive / f'{key}-{material}-{variant}.png', optimize=True)
+                atlas.alpha_composite(image, (variant * 32, row * 32))
+        atlas.save(archive / f'{key}-atlas.png', optimize=True)
+
+
+def main():
+    OUT.mkdir(parents=True, exist_ok=True)
     figure().save(OUT / 'figure.png', optimize=True)
-    catalog['figure'] = {'file': 'assets/ground/figure.png', 'width': 40, 'height': 80, 'anchor': [20, 76]}
-    (ROOT / 'ground-manifest.json').write_text(json.dumps(catalog, ensure_ascii=False, indent=2)+'\n', encoding='utf-8')
-    (ROOT / 'ground-assets.js').write_text('window.GroundAssets = '+json.dumps(catalog, ensure_ascii=False, separators=(',', ':'))+';\n', encoding='utf-8')
-    print('Generated 20 native 32px terrain textures, riverside atlas, figure and manifests.')
+    catalog = {'figure': {'file': 'assets/ground/figure.png', 'width': 40,
+                          'height': 80, 'anchor': [20, 76]}}
+    (ROOT / 'ground-manifest.json').write_text(
+        json.dumps(catalog, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+    (ROOT / 'ground-assets.js').write_text(
+        'window.GroundAssets = ' + json.dumps(catalog, ensure_ascii=False, separators=(',', ':')) + ';\n',
+        encoding='utf-8')
+    if '--legacy-terrain' in sys.argv:
+        legacy_terrain()
+    print('Generated player placeholder and manifests.')
 
 
 if __name__ == '__main__':

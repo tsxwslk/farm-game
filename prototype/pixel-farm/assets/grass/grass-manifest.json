@@ -1,0 +1,134 @@
+{
+  "tile": 32,
+  "variants": 4,
+  "view": "固定俯视微倾，左上受光",
+  "materials": {
+    "lawn": {
+      "palette": {
+        "base": "#97bc29",
+        "light": "#b7d74c",
+        "dark": "#769622"
+      },
+      "variants": [
+        {
+          "file": "assets/grass/grass-lawn-0.png",
+          "size": [
+            32,
+            32
+          ],
+          "palette_locked": true,
+          "colors": {
+            "#97bc29": 924,
+            "#769622": 87,
+            "#b7d74c": 13
+          },
+          "deviation_ratio": 0.098,
+          "light_ratio": 0.013,
+          "dark_ratio": 0.085,
+          "corner_lum": {
+            "tl": 158.76,
+            "tr": 157.52,
+            "bl": 157.79,
+            "br": 156.93,
+            "center": 157.52
+          },
+          "lum_spread": 1.83,
+          "seam_delta": {
+            "wrap_x": 2.06,
+            "wrap_y": 8.02,
+            "inner_max": 62.38
+          }
+        },
+        {
+          "file": "assets/grass/grass-lawn-1.png",
+          "size": [
+            32,
+            32
+          ],
+          "palette_locked": true,
+          "colors": {
+            "#97bc29": 930,
+            "#769622": 81,
+            "#b7d74c": 13
+          },
+          "deviation_ratio": 0.092,
+          "light_ratio": 0.013,
+          "dark_ratio": 0.079,
+          "corner_lum": {
+            "tl": 158.26,
+            "tr": 157.58,
+            "bl": 158.36,
+            "br": 157.58,
+            "center": 158.31
+          },
+          "lum_spread": 0.78,
+          "seam_delta": {
+            "wrap_x": 5.15,
+            "wrap_y": 0.0,
+            "inner_max": 62.38
+          }
+        },
+        {
+          "file": "assets/grass/grass-lawn-2.png",
+          "size": [
+            32,
+            32
+          ],
+          "palette_locked": true,
+          "colors": {
+            "#97bc29": 934,
+            "#769622": 72,
+            "#b7d74c": 18
+          },
+          "deviation_ratio": 0.088,
+          "light_ratio": 0.018,
+          "dark_ratio": 0.07,
+          "corner_lum": {
+            "tl": 158.78,
+            "tr": 158.84,
+            "bl": 158.55,
+            "br": 157.35,
+            "center": 158.22
+          },
+          "lum_spread": 1.49,
+          "seam_delta": {
+            "wrap_x": 6.07,
+            "wrap_y": 1.03,
+            "inner_max": 62.38
+          }
+        },
+        {
+          "file": "assets/grass/grass-lawn-3.png",
+          "size": [
+            32,
+            32
+          ],
+          "palette_locked": true,
+          "colors": {
+            "#97bc29": 926,
+            "#769622": 80,
+            "#b7d74c": 18
+          },
+          "deviation_ratio": 0.096,
+          "light_ratio": 0.018,
+          "dark_ratio": 0.078,
+          "corner_lum": {
+            "tl": 158.75,
+            "tr": 157.56,
+            "bl": 156.79,
+            "br": 159.38,
+            "center": 159.07
+          },
+          "lum_spread": 2.59,
+          "seam_delta": {
+            "wrap_x": 2.98,
+            "wrap_y": 11.11,
+            "inner_max": 62.38
+          }
+        }
+      ],
+      "note": "低矮草坪，黄绿铺底、深橄榄绿成簇短草、少数色簇带浅嫩绿叶尖",
+      "atlas": "assets/grass/grass-lawn-atlas.png"
+    }
+  }
+}

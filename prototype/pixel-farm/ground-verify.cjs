@@ -35,4 +35,50 @@ const fixtures=E.fixture();
 assert.equal(fixtures.cells[2*14+8],'grass','Hole remains empty.');
 assert.equal(fixtures.cells[3*14+8],'dry');
 assert.equal(fixtures.cells[3*14+9],'wet');
-console.log('PASS: 256 masks rotate consistently; inner corners, joined interiors, 12 plots, hit boundaries, 2×2 moisture atomicity and dry/wet continuity.');
+
+assert.equal(world.shoreColumns.length, world.rows);
+const surfaceWidth = world.cols + 1;
+assert.equal(world.surfaces.length, surfaceWidth * (world.rows + 1));
+for (const {grass, water} of world.surfaces) {
+  assert(grass !== 5 && grass !== 10, 'Grass-to-soil tiles have matching sprites.');
+  assert(water !== 5 && water !== 10, 'Soil-to-water tiles have matching sprites.');
+  assert(water === 0 || grass === 0, 'Water tiles meet bare soil only, including around corners.');
+}
+const shorelineMasks = world.surfaces.filter(tile => tile.water > 0 && tile.water < 15).map(tile => tile.water);
+for (const water of [2, 4, 6, 7, 14]) assert(shorelineMasks.includes(water));
+// A one-cell road has a transition on both shoulders, all the way to the map edge.
+assert.equal(world.surfaces[11 * surfaceWidth].grass, 3);
+assert.equal(world.surfaces[12 * surfaceWidth].grass, 12);
+// Path and courtyard are part of the same dirt surface at the salt pit entrance.
+assert.equal(world.surfaces[6 * surfaceWidth + 21].grass, 0);
+
+for (let y = 0; y < world.rows; y++) {
+  const bank = world.shoreColumns[y];
+  for (let x = 0; x < world.cols; x++) {
+    const kind = world.cells[y * world.cols + x];
+    assert.equal(kind === 'water', x >= bank);
+    if (x >= world.bankStarts[y] && x < bank) assert(kind === 'bare' || kind === 'path');
+  }
+}
+
+// The main dirt road and bare courtyards should connect all six destinations.
+const start = 11 * world.cols + 13;
+const queue = [start];
+const reached = new Set(queue);
+for (const index of queue) {
+  const x = index % world.cols, y = Math.floor(index / world.cols);
+  for (const [dx, dy] of E.directions.slice(0, 4)) {
+    const nextX = x + dx, nextY = y + dy;
+    if (nextX < 0 || nextX >= world.cols || nextY < 0 || nextY >= world.rows) continue;
+    const next = nextY * world.cols + nextX;
+    const kind = world.cells[next];
+    if (reached.has(next) || kind === 'water') continue;
+    if (kind !== 'path' && kind !== 'bare') continue;
+    reached.add(next);
+    queue.push(next);
+  }
+}
+for (const [x, y] of [[6, 5], [7, 11], [21, 5], [16, 6], [25, 10], [21, 18]]) {
+  assert(reached.has(y * world.cols + x), `Dirt path to destination at (${x}, ${y})`);
+}
+console.log('PASS: terrain masks, 12 plots, moisture continuity, river boundary and paths to six destinations.');

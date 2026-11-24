@@ -1,0 +1,120 @@
+{
+  "sprite": {
+    "file": "assets/crate/crate-harvest-48x48.png",
+    "size": [
+      48,
+      48
+    ],
+    "palette": {
+      "top": "#E4AF71",
+      "top_hi": "#F5CB95",
+      "lid": "#CD9152",
+      "grain": "#C4874B",
+      "front": "#B37843",
+      "seam": "#7D5027",
+      "foot": "#613C1B",
+      "dark": "#4A2A10"
+    },
+    "palette_locked": true,
+    "bbox": [
+      8,
+      15,
+      39,
+      44
+    ],
+    "bbox_size": [
+      32,
+      30
+    ],
+    "center_offset": 0.0,
+    "anchor": [
+      24,
+      44
+    ],
+    "margin": {
+      "top": 15,
+      "bottom": 3,
+      "left": 8,
+      "right": 8
+    },
+    "area": 882,
+    "detail_pixels": 85,
+    "detail_ratio": 0.0964,
+    "face_lum": {
+      "top": 178.4,
+      "lid": 155.1,
+      "shadow": 48.6,
+      "front": 126.3,
+      "foot": 67.3
+    },
+    "top_widths": [
+      32,
+      30,
+      30,
+      28,
+      28
+    ],
+    "contact": {
+      "row": 44,
+      "runs": [
+        [
+          10,
+          14
+        ],
+        [
+          33,
+          37
+        ]
+      ],
+      "pixels": 10
+    },
+    "outline_breaks": 0,
+    "lone_pixels": 0,
+    "mirror_breaks": 0,
+    "alpha_values": [
+      0,
+      255
+    ],
+    "transparent_pixels": 1422
+  },
+  "structure": {
+    "canvas": "48×48，透明底",
+    "view": "主视图：正面正对镜头，左右对称，无侧立面",
+    "front_width": 32,
+    "depth_rows": 5,
+    "taper_per_side": 2,
+    "lid_thickness": 3,
+    "body_height": 17,
+    "foot": [
+      5,
+      3
+    ],
+    "rows": {
+      "top_face": [
+        15,
+        19
+      ],
+      "crease": 20,
+      "lid_edge": [
+        21,
+        23
+      ],
+      "under_lid": 24,
+      "body": [
+        25,
+        41
+      ],
+      "feet": [
+        42,
+        44
+      ]
+    },
+    "plank_seams": [
+      30,
+      36
+    ]
+  },
+  "checks": [
+    "全部通过"
+  ]
+}

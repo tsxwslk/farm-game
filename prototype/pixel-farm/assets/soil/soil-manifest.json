@@ -1,0 +1,253 @@
+{
+  "tile": 32,
+  "variants": 4,
+  "view": "固定俯视微倾，左上受光",
+  "materials": {
+    "bare": {
+      "palette": {
+        "base": "#f0b035",
+        "light": "#f9c856",
+        "dark": "#d9921e"
+      },
+      "variants": [
+        {
+          "file": "assets/soil/soil-bare-0.png",
+          "size": [
+            32,
+            32
+          ],
+          "palette_locked": true,
+          "colors": {
+            "#f0b035": 853,
+            "#d9921e": 158,
+            "#f9c856": 13
+          },
+          "deviation_ratio": 0.167,
+          "light_ratio": 0.013,
+          "corner_lum": {
+            "tl": 175.4,
+            "tr": 179.37,
+            "bl": 177.86,
+            "br": 176.14,
+            "center": 175.53
+          },
+          "lum_spread": 3.97,
+          "seam_delta": {
+            "wrap_x": 0.0,
+            "wrap_y": 0.85,
+            "inner_max": 47.65
+          }
+        },
+        {
+          "file": "assets/soil/soil-bare-1.png",
+          "size": [
+            32,
+            32
+          ],
+          "palette_locked": true,
+          "colors": {
+            "#f0b035": 882,
+            "#d9921e": 130,
+            "#f9c856": 12
+          },
+          "deviation_ratio": 0.139,
+          "light_ratio": 0.012,
+          "corner_lum": {
+            "tl": 177.76,
+            "tr": 177.73,
+            "bl": 178.57,
+            "br": 177.59,
+            "center": 177.33
+          },
+          "lum_spread": 0.98,
+          "seam_delta": {
+            "wrap_x": 4.88,
+            "wrap_y": 3.62,
+            "inner_max": 47.65
+          }
+        },
+        {
+          "file": "assets/soil/soil-bare-2.png",
+          "size": [
+            32,
+            32
+          ],
+          "palette_locked": true,
+          "colors": {
+            "#f0b035": 870,
+            "#d9921e": 146,
+            "#f9c856": 8
+          },
+          "deviation_ratio": 0.15,
+          "light_ratio": 0.008,
+          "corner_lum": {
+            "tl": 176.22,
+            "tr": 176.43,
+            "bl": 179.82,
+            "br": 177.17,
+            "center": 177.28
+          },
+          "lum_spread": 3.6,
+          "seam_delta": {
+            "wrap_x": 2.54,
+            "wrap_y": 0.85,
+            "inner_max": 47.65
+          }
+        },
+        {
+          "file": "assets/soil/soil-bare-3.png",
+          "size": [
+            32,
+            32
+          ],
+          "palette_locked": true,
+          "colors": {
+            "#f0b035": 861,
+            "#d9921e": 149,
+            "#f9c856": 14
+          },
+          "deviation_ratio": 0.159,
+          "light_ratio": 0.014,
+          "corner_lum": {
+            "tl": 175.32,
+            "tr": 179.82,
+            "bl": 176.59,
+            "br": 178.07,
+            "center": 176.01
+          },
+          "lum_spread": 4.5,
+          "seam_delta": {
+            "wrap_x": 4.24,
+            "wrap_y": 2.54,
+            "inner_max": 47.65
+          }
+        }
+      ],
+      "note": "农场裸土，干燥平坦、晒过太阳",
+      "atlas": "assets/soil/soil-bare-atlas.png"
+    },
+    "path": {
+      "palette": {
+        "base": "#f3b944",
+        "light": "#fbcd63",
+        "dark": "#dda02b"
+      },
+      "variants": [
+        {
+          "file": "assets/soil/soil-path-0.png",
+          "size": [
+            32,
+            32
+          ],
+          "palette_locked": true,
+          "colors": {
+            "#f3b944": 970,
+            "#dda02b": 46,
+            "#fbcd63": 8
+          },
+          "deviation_ratio": 0.053,
+          "light_ratio": 0.008,
+          "corner_lum": {
+            "tl": 188.34,
+            "tr": 186.98,
+            "bl": 188.41,
+            "br": 188.51,
+            "center": 188.44
+          },
+          "lum_spread": 1.53,
+          "seam_delta": {
+            "wrap_x": 0.0,
+            "wrap_y": 0.55,
+            "inner_max": 24.1
+          }
+        },
+        {
+          "file": "assets/soil/soil-path-1.png",
+          "size": [
+            32,
+            32
+          ],
+          "palette_locked": true,
+          "colors": {
+            "#f3b944": 970,
+            "#dda02b": 49,
+            "#fbcd63": 5
+          },
+          "deviation_ratio": 0.053,
+          "light_ratio": 0.005,
+          "corner_lum": {
+            "tl": 188.58,
+            "tr": 186.98,
+            "bl": 188.13,
+            "br": 188.06,
+            "center": 187.75
+          },
+          "lum_spread": 1.6,
+          "seam_delta": {
+            "wrap_x": 0.0,
+            "wrap_y": 0.75,
+            "inner_max": 24.1
+          }
+        },
+        {
+          "file": "assets/soil/soil-path-2.png",
+          "size": [
+            32,
+            32
+          ],
+          "palette_locked": true,
+          "colors": {
+            "#f3b944": 981,
+            "#dda02b": 36,
+            "#fbcd63": 7
+          },
+          "deviation_ratio": 0.042,
+          "light_ratio": 0.007,
+          "corner_lum": {
+            "tl": 188.29,
+            "tr": 187.82,
+            "bl": 188.72,
+            "br": 188.27,
+            "center": 187.94
+          },
+          "lum_spread": 0.9,
+          "seam_delta": {
+            "wrap_x": 0.0,
+            "wrap_y": 0.0,
+            "inner_max": 24.1
+          }
+        },
+        {
+          "file": "assets/soil/soil-path-3.png",
+          "size": [
+            32,
+            32
+          ],
+          "palette_locked": true,
+          "colors": {
+            "#f3b944": 971,
+            "#dda02b": 39,
+            "#fbcd63": 14
+          },
+          "deviation_ratio": 0.052,
+          "light_ratio": 0.014,
+          "corner_lum": {
+            "tl": 188.13,
+            "tr": 188.13,
+            "bl": 188.18,
+            "br": 188.88,
+            "center": 187.25
+          },
+          "lum_spread": 0.75,
+          "seam_delta": {
+            "wrap_x": 0.0,
+            "wrap_y": 1.1,
+            "inner_max": 24.1
+          }
+        }
+      ],
+      "note": "踩实土路，同色系稍浅、表面更平、颗粒更少",
+      "atlas": "assets/soil/soil-path-atlas.png"
+    }
+  }
+}

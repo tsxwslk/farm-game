@@ -1,0 +1,189 @@
+{
+  "tile": 32,
+  "variants": 4,
+  "view": "固定俯视，只有开阔水面，不画岸、不画倒影",
+  "palette": {
+    "base": "#6FAAA6",
+    "light": "#8DBBB0",
+    "dark": "#5E9796"
+  },
+  "conf": {
+    "row_top": 1,
+    "row_min": 5,
+    "row_jitter": 2,
+    "seg_len": [
+      2,
+      5
+    ],
+    "seg_gap": [
+      1,
+      2
+    ],
+    "lit_share": 0.62,
+    "thick": 0.28,
+    "drift": 0.35,
+    "seed": 20261124
+  },
+  "tiles": {
+    "flow-0": {
+      "file": "assets/water/water-flow-0.png",
+      "size": [
+        32,
+        32
+      ],
+      "palette_locked": true,
+      "colors": {
+        "#6faaa6": 855,
+        "#8dbbb0": 109,
+        "#5e9796": 60
+      },
+      "base_ratio": 0.835,
+      "light_ratio": 0.106,
+      "dark_ratio": 0.059,
+      "bands_light": [
+        27,
+        20,
+        47,
+        15
+      ],
+      "corner_lum": {
+        "tl": 152.29,
+        "tr": 152.67,
+        "bl": 153.86,
+        "br": 153.12,
+        "center": 152.74
+      },
+      "lum_spread": 1.57,
+      "border_delta": -0.17,
+      "seam_delta": {
+        "wrap_x": 1.13,
+        "wrap_y": 0.0,
+        "inner_max": 20.09,
+        "inner_max_y": 20.09
+      },
+      "lone_pixels": 0,
+      "blocks_2x2": 29,
+      "blocks_3x3": 0
+    },
+    "flow-1": {
+      "file": "assets/water/water-flow-1.png",
+      "size": [
+        32,
+        32
+      ],
+      "palette_locked": true,
+      "colors": {
+        "#6faaa6": 842,
+        "#8dbbb0": 114,
+        "#5e9796": 68
+      },
+      "base_ratio": 0.822,
+      "light_ratio": 0.111,
+      "dark_ratio": 0.066,
+      "bands_light": [
+        30,
+        23,
+        16,
+        45
+      ],
+      "corner_lum": {
+        "tl": 152.96,
+        "tr": 153.18,
+        "bl": 152.84,
+        "br": 152.79,
+        "center": 153.67
+      },
+      "lum_spread": 0.39,
+      "border_delta": 0.27,
+      "seam_delta": {
+        "wrap_x": 2.38,
+        "wrap_y": 6.09,
+        "inner_max": 20.09,
+        "inner_max_y": 20.09
+      },
+      "lone_pixels": 0,
+      "blocks_2x2": 34,
+      "blocks_3x3": 0
+    },
+    "flow-2": {
+      "file": "assets/water/water-flow-2.png",
+      "size": [
+        32,
+        32
+      ],
+      "palette_locked": true,
+      "colors": {
+        "#6faaa6": 858,
+        "#5e9796": 87,
+        "#8dbbb0": 79
+      },
+      "base_ratio": 0.838,
+      "light_ratio": 0.077,
+      "dark_ratio": 0.085,
+      "bands_light": [
+        20,
+        13,
+        32,
+        14
+      ],
+      "corner_lum": {
+        "tl": 152.05,
+        "tr": 151.45,
+        "bl": 151.49,
+        "br": 152.68,
+        "center": 153.83
+      },
+      "lum_spread": 1.23,
+      "border_delta": -0.67,
+      "seam_delta": {
+        "wrap_x": 0.0,
+        "wrap_y": 0.0,
+        "inner_max": 20.09,
+        "inner_max_y": 20.09
+      },
+      "lone_pixels": 0,
+      "blocks_2x2": 22,
+      "blocks_3x3": 0
+    },
+    "flow-3": {
+      "file": "assets/water/water-flow-3.png",
+      "size": [
+        32,
+        32
+      ],
+      "palette_locked": true,
+      "colors": {
+        "#6faaa6": 835,
+        "#8dbbb0": 109,
+        "#5e9796": 80
+      },
+      "base_ratio": 0.815,
+      "light_ratio": 0.106,
+      "dark_ratio": 0.078,
+      "bands_light": [
+        23,
+        24,
+        29,
+        33
+      ],
+      "corner_lum": {
+        "tl": 150.85,
+        "tr": 153.19,
+        "bl": 152.78,
+        "br": 153.7,
+        "center": 152.53
+      },
+      "lum_spread": 2.85,
+      "border_delta": 1.06,
+      "seam_delta": {
+        "wrap_x": 3.77,
+        "wrap_y": 0.0,
+        "inner_max": 20.09,
+        "inner_max_y": 20.09
+      },
+      "lone_pixels": 0,
+      "blocks_2x2": 40,
+      "blocks_3x3": 0
+    }
+  }
+}

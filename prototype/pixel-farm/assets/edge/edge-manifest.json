@@ -1,0 +1,1061 @@
+{
+  "tile": 32,
+  "variants": 3,
+  "view": "固定俯视微倾，左上受光；草在上、土在下，交界贴地",
+  "palette": {
+    "grass": {
+      "base": "#97bc29",
+      "light": "#b7d74c",
+      "dark": "#769622"
+    },
+    "soil": {
+      "base": "#f0b035",
+      "light": "#f9c856",
+      "dark": "#d9921e"
+    }
+  },
+  "plain_reference": {
+    "grass_dark_ratio": 0.085,
+    "soil_dark_ratio": 0.154
+  },
+  "shapes": [
+    "straight",
+    "outer",
+    "inner",
+    "bevel-inner",
+    "bevel-outer"
+  ],
+  "tiles": {
+    "straight-0": {
+      "file": "assets/edge/edge-grasssoil-straight-0.png",
+      "size": [
+        32,
+        32
+      ],
+      "palette_locked": true,
+      "colors_used": 6,
+      "colors": {
+        "#97bc29": 425,
+        "#f0b035": 424,
+        "#769622": 91,
+        "#d9921e": 68,
+        "#f9c856": 11,
+        "#b7d74c": 5
+      },
+      "grass_area": 516,
+      "soil_area": 508,
+      "grass_dark_ratio": 0.105,
+      "soil_dark_ratio": 0.134,
+      "seam": {
+        "edge_left_grass_rows": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ],
+        "edge_right_grass_rows": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ]
+      },
+      "facet_45": {
+        "rows_with_boundary": 3,
+        "row_steps": [
+          -8,
+          -7
+        ]
+      }
+    },
+    "straight-1": {
+      "file": "assets/edge/edge-grasssoil-straight-1.png",
+      "size": [
+        32,
+        32
+      ],
+      "palette_locked": true,
+      "colors_used": 6,
+      "colors": {
+        "#f0b035": 440,
+        "#97bc29": 436,
+        "#769622": 79,
+        "#d9921e": 58,
+        "#f9c856": 6,
+        "#b7d74c": 5
+      },
+      "grass_area": 516,
+      "soil_area": 508,
+      "grass_dark_ratio": 0.083,
+      "soil_dark_ratio": 0.114,
+      "seam": {
+        "edge_left_grass_rows": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ],
+        "edge_right_grass_rows": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ]
+      },
+      "facet_45": {
+        "rows_with_boundary": 3,
+        "row_steps": [
+          -8,
+          -7
+        ]
+      }
+    },
+    "straight-2": {
+      "file": "assets/edge/edge-grasssoil-straight-2.png",
+      "size": [
+        32,
+        32
+      ],
+      "palette_locked": true,
+      "colors_used": 6,
+      "colors": {
+        "#97bc29": 438,
+        "#f0b035": 413,
+        "#d9921e": 81,
+        "#769622": 70,
+        "#b7d74c": 14,
+        "#f9c856": 8
+      },
+      "grass_area": 516,
+      "soil_area": 508,
+      "grass_dark_ratio": 0.062,
+      "soil_dark_ratio": 0.159,
+      "seam": {
+        "edge_left_grass_rows": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ],
+        "edge_right_grass_rows": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ]
+      },
+      "facet_45": {
+        "rows_with_boundary": 3,
+        "row_steps": [
+          -8,
+          -7
+        ]
+      }
+    },
+    "outer-0": {
+      "file": "assets/edge/edge-grasssoil-outer-0.png",
+      "size": [
+        32,
+        32
+      ],
+      "palette_locked": true,
+      "colors_used": 6,
+      "colors": {
+        "#f0b035": 632,
+        "#97bc29": 218,
+        "#d9921e": 94,
+        "#769622": 65,
+        "#f9c856": 12,
+        "#b7d74c": 3
+      },
+      "grass_area": 281,
+      "soil_area": 743,
+      "grass_dark_ratio": 0.096,
+      "soil_dark_ratio": 0.127,
+      "seam": {
+        "edge_left_grass_rows": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ],
+        "edge_right_grass_rows": []
+      },
+      "facet_45": {
+        "rows_with_boundary": 17,
+        "row_steps": [
+          -4,
+          0,
+          1
+        ]
+      }
+    },
+    "outer-1": {
+      "file": "assets/edge/edge-grasssoil-outer-1.png",
+      "size": [
+        32,
+        32
+      ],
+      "palette_locked": true,
+      "colors_used": 6,
+      "colors": {
+        "#f0b035": 624,
+        "#97bc29": 226,
+        "#d9921e": 99,
+        "#769622": 56,
+        "#f9c856": 16,
+        "#b7d74c": 3
+      },
+      "grass_area": 281,
+      "soil_area": 743,
+      "grass_dark_ratio": 0.068,
+      "soil_dark_ratio": 0.133,
+      "seam": {
+        "edge_left_grass_rows": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ],
+        "edge_right_grass_rows": []
+      },
+      "facet_45": {
+        "rows_with_boundary": 17,
+        "row_steps": [
+          -4,
+          0,
+          1
+        ]
+      }
+    },
+    "outer-2": {
+      "file": "assets/edge/edge-grasssoil-outer-2.png",
+      "size": [
+        32,
+        32
+      ],
+      "palette_locked": true,
+      "colors_used": 6,
+      "colors": {
+        "#f0b035": 613,
+        "#97bc29": 222,
+        "#d9921e": 118,
+        "#769622": 55,
+        "#b7d74c": 10,
+        "#f9c856": 6
+      },
+      "grass_area": 281,
+      "soil_area": 743,
+      "grass_dark_ratio": 0.057,
+      "soil_dark_ratio": 0.159,
+      "seam": {
+        "edge_left_grass_rows": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ],
+        "edge_right_grass_rows": []
+      },
+      "facet_45": {
+        "rows_with_boundary": 17,
+        "row_steps": [
+          -4,
+          0,
+          1
+        ]
+      }
+    },
+    "inner-0": {
+      "file": "assets/edge/edge-grasssoil-inner-0.png",
+      "size": [
+        32,
+        32
+      ],
+      "palette_locked": true,
+      "colors_used": 6,
+      "colors": {
+        "#97bc29": 644,
+        "#f0b035": 216,
+        "#769622": 100,
+        "#d9921e": 44,
+        "#b7d74c": 11,
+        "#f9c856": 9
+      },
+      "grass_area": 751,
+      "soil_area": 273,
+      "grass_dark_ratio": 0.087,
+      "soil_dark_ratio": 0.161,
+      "seam": {
+        "edge_left_grass_rows": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31
+        ],
+        "edge_right_grass_rows": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ]
+      },
+      "facet_45": {
+        "rows_with_boundary": 18,
+        "row_steps": [
+          -7,
+          -4,
+          -3,
+          -1,
+          0,
+          1
+        ]
+      }
+    },
+    "inner-1": {
+      "file": "assets/edge/edge-grasssoil-inner-1.png",
+      "size": [
+        32,
+        32
+      ],
+      "palette_locked": true,
+      "colors_used": 6,
+      "colors": {
+        "#97bc29": 653,
+        "#f0b035": 235,
+        "#769622": 95,
+        "#d9921e": 25,
+        "#f9c856": 9,
+        "#b7d74c": 7
+      },
+      "grass_area": 751,
+      "soil_area": 273,
+      "grass_dark_ratio": 0.08,
+      "soil_dark_ratio": 0.092,
+      "seam": {
+        "edge_left_grass_rows": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31
+        ],
+        "edge_right_grass_rows": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ]
+      },
+      "facet_45": {
+        "rows_with_boundary": 18,
+        "row_steps": [
+          -7,
+          -4,
+          -3,
+          -1,
+          0,
+          1
+        ]
+      }
+    },
+    "inner-2": {
+      "file": "assets/edge/edge-grasssoil-inner-2.png",
+      "size": [
+        32,
+        32
+      ],
+      "palette_locked": true,
+      "colors_used": 6,
+      "colors": {
+        "#97bc29": 657,
+        "#f0b035": 202,
+        "#769622": 84,
+        "#d9921e": 61,
+        "#b7d74c": 16,
+        "#f9c856": 4
+      },
+      "grass_area": 751,
+      "soil_area": 273,
+      "grass_dark_ratio": 0.063,
+      "soil_dark_ratio": 0.223,
+      "seam": {
+        "edge_left_grass_rows": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31
+        ],
+        "edge_right_grass_rows": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ]
+      },
+      "facet_45": {
+        "rows_with_boundary": 18,
+        "row_steps": [
+          -7,
+          -4,
+          -3,
+          -1,
+          0,
+          1
+        ]
+      }
+    },
+    "bevel-inner-0": {
+      "file": "assets/edge/edge-grasssoil-bevel-inner-0.png",
+      "size": [
+        32,
+        32
+      ],
+      "palette_locked": true,
+      "colors_used": 6,
+      "colors": {
+        "#97bc29": 782,
+        "#f0b035": 109,
+        "#769622": 97,
+        "#d9921e": 16,
+        "#b7d74c": 13,
+        "#f9c856": 7
+      },
+      "grass_area": 888,
+      "soil_area": 136,
+      "grass_dark_ratio": 0.086,
+      "soil_dark_ratio": 0.118,
+      "seam": {
+        "edge_left_grass_rows": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ],
+        "edge_right_grass_rows": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31
+        ]
+      },
+      "facet_45": {
+        "rows_with_boundary": 16,
+        "row_steps": [
+          -1
+        ]
+      }
+    },
+    "bevel-inner-1": {
+      "file": "assets/edge/edge-grasssoil-bevel-inner-1.png",
+      "size": [
+        32,
+        32
+      ],
+      "palette_locked": true,
+      "colors_used": 6,
+      "colors": {
+        "#97bc29": 788,
+        "#f0b035": 110,
+        "#769622": 94,
+        "#d9921e": 19,
+        "#b7d74c": 10,
+        "#f9c856": 3
+      },
+      "grass_area": 888,
+      "soil_area": 136,
+      "grass_dark_ratio": 0.082,
+      "soil_dark_ratio": 0.14,
+      "seam": {
+        "edge_left_grass_rows": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ],
+        "edge_right_grass_rows": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31
+        ]
+      },
+      "facet_45": {
+        "rows_with_boundary": 16,
+        "row_steps": [
+          -1
+        ]
+      }
+    },
+    "bevel-inner-2": {
+      "file": "assets/edge/edge-grasssoil-bevel-inner-2.png",
+      "size": [
+        32,
+        32
+      ],
+      "palette_locked": true,
+      "colors_used": 6,
+      "colors": {
+        "#97bc29": 790,
+        "#f0b035": 112,
+        "#769622": 85,
+        "#b7d74c": 18,
+        "#d9921e": 16,
+        "#f9c856": 3
+      },
+      "grass_area": 888,
+      "soil_area": 136,
+      "grass_dark_ratio": 0.071,
+      "soil_dark_ratio": 0.118,
+      "seam": {
+        "edge_left_grass_rows": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ],
+        "edge_right_grass_rows": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31
+        ]
+      },
+      "facet_45": {
+        "rows_with_boundary": 16,
+        "row_steps": [
+          -1
+        ]
+      }
+    },
+    "bevel-outer-0": {
+      "file": "assets/edge/edge-grasssoil-bevel-outer-0.png",
+      "size": [
+        32,
+        32
+      ],
+      "palette_locked": true,
+      "colors_used": 6,
+      "colors": {
+        "#f0b035": 764,
+        "#d9921e": 110,
+        "#97bc29": 109,
+        "#769622": 28,
+        "#f9c856": 10,
+        "#b7d74c": 3
+      },
+      "grass_area": 136,
+      "soil_area": 888,
+      "grass_dark_ratio": 0.059,
+      "soil_dark_ratio": 0.124,
+      "seam": {
+        "edge_left_grass_rows": [
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31
+        ],
+        "edge_right_grass_rows": []
+      },
+      "facet_45": {
+        "rows_with_boundary": 16,
+        "row_steps": [
+          1
+        ]
+      }
+    },
+    "bevel-outer-1": {
+      "file": "assets/edge/edge-grasssoil-bevel-outer-1.png",
+      "size": [
+        32,
+        32
+      ],
+      "palette_locked": true,
+      "colors_used": 6,
+      "colors": {
+        "#f0b035": 741,
+        "#d9921e": 129,
+        "#97bc29": 113,
+        "#769622": 25,
+        "#f9c856": 14,
+        "#b7d74c": 2
+      },
+      "grass_area": 136,
+      "soil_area": 888,
+      "grass_dark_ratio": 0.037,
+      "soil_dark_ratio": 0.145,
+      "seam": {
+        "edge_left_grass_rows": [
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31
+        ],
+        "edge_right_grass_rows": []
+      },
+      "facet_45": {
+        "rows_with_boundary": 16,
+        "row_steps": [
+          1
+        ]
+      }
+    },
+    "bevel-outer-2": {
+      "file": "assets/edge/edge-grasssoil-bevel-outer-2.png",
+      "size": [
+        32,
+        32
+      ],
+      "palette_locked": true,
+      "colors_used": 6,
+      "colors": {
+        "#f0b035": 732,
+        "#d9921e": 139,
+        "#97bc29": 111,
+        "#769622": 26,
+        "#f9c856": 12,
+        "#b7d74c": 4
+      },
+      "grass_area": 136,
+      "soil_area": 888,
+      "grass_dark_ratio": 0.037,
+      "soil_dark_ratio": 0.157,
+      "seam": {
+        "edge_left_grass_rows": [
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31
+        ],
+        "edge_right_grass_rows": []
+      },
+      "facet_45": {
+        "rows_with_boundary": 16,
+        "row_steps": [
+          1
+        ]
+      }
+    }
+  },
+  "diagonal": {
+    "shapes": [
+      "bevel-inner",
+      "bevel-outer"
+    ],
+    "line": "y = x + 16，从左边中点走到下边中点；端点与直边砖边界对齐",
+    "note": "两形状互为补集：bevel-inner 草 7/8 + 45° 土三角，bevel-outer 互换。斜切角用单块按角旋转；45° 斜边用两者相间（d=+16 用 bevel-inner，d=-16 用 bevel-outer 转 180 度）",
+    "corner_rotation": {
+      "top_left": 3,
+      "top_right": 0,
+      "bottom_left": 2,
+      "bottom_right": 1
+    },
+    "checks": {
+      "bevel-patch": {
+        "seam_faults": 0,
+        "at": []
+      },
+      "bevel-island": {
+        "seam_faults": 0,
+        "at": []
+      },
+      "diag-strip": {
+        "seam_faults": 0,
+        "at": []
+      },
+      "diag-band": {
+        "seam_faults": 0,
+        "at": []
+      }
+    },
+    "outputs": [
+      "../../output/art-previews/edge/edge-bevel-soilplot-4x.png",
+      "../../output/art-previews/edge/edge-bevel-grassisland-4x.png",
+      "../../output/art-previews/edge/edge-diag-strip-4x.png",
+      "../../output/art-previews/edge/edge-diag-band-4x.png"
+    ]
+  }
+}

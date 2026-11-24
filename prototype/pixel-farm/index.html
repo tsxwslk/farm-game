@@ -2,29 +2,75 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="theme-color" content="#f3f0e5">
-  <title>柳湾 · 光影田畦</title>
-  <link rel="stylesheet" href="style.css">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#2c3726">
+  <title>物志 · 柳湾</title>
   <link rel="stylesheet" href="scene.css">
   <script defer src="ground-assets.js"></script>
   <script defer src="ground-engine.js"></script>
   <script defer src="ground-painter.js"></script>
   <script defer src="depth-assets.js"></script>
+  <script defer src="game.js"></script>
+  <script defer src="game-controls.js"></script>
   <script defer src="scene.js"></script>
 </head>
 <body>
-  <main id="depth-lab">
-    <header><div><p class="eyebrow">物志 / 农场视觉样板</p><h1>柳湾<span>河畔青绿 · 光影田畦</span></h1></div></header>
-    <div class="toolbar">
-      <div class="control-group"><button id="depth-crops" type="button" aria-pressed="true">显示白菜</button><button id="depth-person" type="button" aria-pressed="false">人物站到田里</button><label for="moisture">耕地</label><select id="moisture"><option value="mixed">局部干湿</option><option value="dry">全部干土</option><option value="wet">全部湿土</option></select></div>
-      <div class="control-group"><label for="depth-zoom">倍率</label><select id="depth-zoom"><option value="1">1 倍</option><option value="2" selected>2 倍</option></select></div>
+  <main id="depth-stage" aria-label="物志 · 柳湾">
+    <canvas id="depth-scene" width="1088" height="640" tabindex="0" aria-label="柳湾。点击地面寻路，点击田块或设施走过去操作。WASD 移动，E 操作。"></canvas>
+
+    <aside class="quest hud" aria-label="当前任务">
+      <p class="place">柳湾</p>
+      <strong id="game-objective">柳湾第一卷</strong>
+      <p id="game-line"></p>
+    </aside>
+
+    <div class="hud clock" aria-label="时间和钱币">
+      <span id="game-date">春 · 第 1 天</span>
+      <strong id="game-clock">06:00</strong>
+      <strong id="game-coins">0 文</strong>
     </div>
-    <div id="depth-stage" class="depth-stage"><canvas id="depth-scene" width="448" height="384" role="img" aria-label="光影田畦农场：白菜、人物、小屋、土路与右侧河水"></canvas></div>
-    <div id="depth-pan-row" class="depth-pan-row" hidden><label for="depth-pan">左右查看</label><input id="depth-pan" type="range" min="0" max="100" value="50" aria-label="左右移动场景视野"></div>
-    <div class="scene-caption"><p id="depth-status" role="status">正在加载场景…</p><span id="depth-scale"></span></div>
-    <section class="depth-notes"><h2>光影与田畦</h2><p>左上光源，右下投影，田畦保留薄土壁。可切换人物站位检查遮挡，或隐藏作物观察干湿土。</p><p>人物与小屋为比例占位，目前是视觉样板，尚未接入种植、生长、移动和存档。</p></section>
-    <footer><span>基础地格 32×32 · 种植单元 64×64</span><span>白菜 48×72 · 田畦厚度 4 像素</span></footer>
+
+    <div class="message">
+      <p id="crop-context" class="hud" hidden></p>
+      <p id="depth-status" class="hud" role="status">正在加载柳湾…</p>
+      <button id="game-action" class="action" type="button" hidden>操作 <kbd>E</kbd></button>
+    </div>
+
+    <div class="left-dock">
+      <section id="game-menu" class="hud sheet" hidden aria-labelledby="game-menu-title">
+        <div class="sheet-heading">
+          <h2 id="game-menu-title">背包</h2>
+          <button id="close-menu" class="quiet" type="button" aria-label="关闭面板">×</button>
+        </div>
+        <div id="game-panel" class="game-panel"></div>
+        <div id="game-build" class="build-options" hidden>
+          <button id="place-kiln" type="button">摆放盐灶</button>
+          <button id="place-jar" type="button">摆放腌菜缸</button>
+        </div>
+        <nav id="map-sites" aria-label="前往柳湾各处" hidden></nav>
+      </section>
+      <div class="dock" role="group" aria-label="随身工具">
+        <button type="button" id="game-bag" aria-controls="game-menu" aria-expanded="false">背包 <kbd>B</kbd></button>
+        <button type="button" id="game-ledger" aria-controls="game-menu" aria-expanded="false">物志 <kbd>J</kbd></button>
+        <button type="button" id="game-sites" aria-controls="game-menu" aria-expanded="false">地点</button>
+      </div>
+    </div>
+
+    <div class="right-dock">
+      <div class="dock" role="group" aria-label="镜头">
+        <button type="button" id="zoom-out" class="square" aria-label="缩小">−</button>
+        <button type="button" id="zoom-in" class="square" aria-label="放大">+</button>
+        <button type="button" id="zoom-map" aria-pressed="false">全图</button>
+        <button type="button" id="fullscreen" aria-label="进入全屏" hidden>全屏</button>
+      </div>
+      <button type="button" id="game-speed" class="fast-forward" aria-label="快进 1 游戏小时" title="快进 1 游戏小时">»</button>
+    </div>
+
+    <dialog id="game-review" class="day-review hud" aria-labelledby="review-title">
+      <h2 id="review-title">午夜日结</h2>
+      <ul id="review-log"></ul>
+      <button type="button" id="next-day" class="action">进入次日</button>
+    </dialog>
   </main>
 </body>
 </html>

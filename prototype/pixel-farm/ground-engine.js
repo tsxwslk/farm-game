@@ -23,15 +23,89 @@
     }
     return result;
   }
-  function createWorld(){
-    const cols=14,rows=12,cells=Array(cols*rows).fill('grass');
-    const rect=(x,y,w,h,kind)=>{for(let yy=y;yy<y+h;yy++)for(let xx=x;xx<x+w;xx++)cells[yy*cols+xx]=kind};
-    rect(1,1,9,2,'bare');
-    rect(11,0,1,12,'path');rect(0,10,14,1,'path');
-    rect(2,4,8,6,'dry');
-    const plots=[];
-    for(let row=0;row<3;row++)for(let col=0;col<4;col++)plots.push({id:row*4+col,col,row,x:64+col*64,y:128+row*64,wet:(col+row)%3===0});
-    return{cols,rows,cells,plots};
+  function createWorld() {
+    const cols = 34, rows = 20;
+    const cells = Array(cols * rows).fill('grass');
+    function rect(x, y, width, height, kind) {
+      for (let row = y; row < y + height; row++) {
+        for (let col = x; col < x + width; col++) cells[row * cols + col] = kind;
+      }
+    }
+    function courtyard(y, spans) {
+      for (const [offset, [left, right]] of spans.entries()) {
+        rect(left, y + offset, right - left + 1, 1, 'bare');
+      }
+    }
+    courtyard(3, [[4, 8], [3, 10], [3, 11], [4, 10]]);
+    courtyard(3, [[20, 21], [19, 22], [19, 22], [20, 21]]);
+    courtyard(15, [[19, 20], [18, 21], [18, 22], [19, 22]]);
+
+    rect(0, 11, 24, 1, 'path');
+    rect(11, 5, 1, 7, 'path');
+    rect(11, 8, 3, 1, 'path');
+    rect(13, 8, 1, 4, 'path');
+    rect(16, 6, 1, 6, 'path');
+    rect(16, 6, 6, 1, 'path');
+    rect(21, 5, 1, 2, 'path');
+    rect(23, 10, 3, 1, 'path');
+    rect(23, 10, 1, 2, 'path');
+    rect(17, 11, 1, 5, 'path');
+    rect(17, 15, 3, 1, 'path');
+    rect(21, 16, 1, 4, 'path');
+    rect(3, 7, 8, 4, 'dry');
+    rect(6, 14, 8, 2, 'dry');
+
+    const shoreColumns = [29, 29, 28, 28, 27, 27, 26, 26, 26, 26,
+                          27, 27, 28, 28, 28, 27, 27, 26, 25, 24];
+    const bankStarts = shoreColumns.map((shore, y) => {
+      const north = shoreColumns[y - 1] ?? shore;
+      const south = shoreColumns[y + 1] ?? shore;
+      return Math.min(north, shore, south) - 1;
+    });
+    for (let y = 0; y < rows; y++) {
+      const shore = shoreColumns[y];
+      for (let x = bankStarts[y]; x < shore; x++) {
+        const index = y * cols + x;
+        if (cells[index] === 'grass') cells[index] = 'bare';
+      }
+      rect(shore, y, cols - shore, 1, 'water');
+    }
+
+    // Sample the four cells around each tile junction. The visual tiles are
+    // offset by half a tile so transitions follow the terrain grid boundaries.
+    function cellAt(x, y) {
+      const col = Math.max(0, Math.min(x, cols - 1));
+      const row = Math.max(0, Math.min(y, rows - 1));
+      return cells[row * cols + col];
+    }
+    const surfaces = Array.from({length: (cols + 1) * (rows + 1)}, (_, index) => {
+      const x = index % (cols + 1), y = Math.floor(index / (cols + 1));
+      const corners = [cellAt(x - 1, y - 1), cellAt(x, y - 1), cellAt(x, y), cellAt(x - 1, y)];
+      let grass = 0, water = 0;
+      for (const [corner, kind] of corners.entries()) {
+        if (kind === 'water') water |= 1 << corner;
+        else if (kind !== 'bare' && kind !== 'path') grass |= 1 << corner;
+      }
+      return {grass, water};
+    });
+    const plots = [];
+    for (const [left, top, height] of [[3, 7, 2], [6, 14, 1]]) {
+      for (let row = 0; row < height; row++) {
+        for (let col = 0; col < 4; col++) {
+          plots.push({id: plots.length, col, row, x: (left + col * 2) * TILE,
+                      y: (top + row * 2) * TILE, wet: (col + row) % 3 === 0});
+        }
+      }
+    }
+    const sites = [
+      {id: 'archive', label: '田记所旧址', x: 6.25, y: 5.65},
+      {id: 'farm', label: '菜畦', x: 7, y: 10.75},
+      {id: 'salt', label: '旧盐坑', x: 21, y: 5.35},
+      {id: 'woods', label: '林缘', x: 16.5, y: 4.75},
+      {id: 'bank', label: '河岸', x: 26.65, y: 10.45},
+      {id: 'exit', label: '山道出口', x: 21.5, y: 18.85},
+    ];
+    return {cols, rows, cells, plots, surfaces, shoreColumns, bankStarts, sites};
   }
   function cellsWithMoisture(world,mode){
     const cells=[...world.cells];
