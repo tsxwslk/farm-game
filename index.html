@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#2c3726">
+  <title>物志 · 柳湾</title>
+  <link rel="icon" type="image/png" href="/prototype/pixel-farm/assets/cherry-radish/05-inventory.png">
+  <script type="module" src="/src/main.ts"></script>
+</head>
+<body>
+  <main id="depth-stage" aria-label="物志 · 柳湾">
+    <canvas id="depth-scene" width="1088" height="640" tabindex="0" aria-label="柳湾。WASD 或点击地面移动，F 操作。"></canvas>
+
+    <div class="place-name hud"><span>物志</span><strong>柳湾</strong></div>
+    <div class="hud clock" aria-label="时间和钱币">
+      <span id="game-date">春 · 第 1 天</span>
+      <strong id="game-clock">06:00</strong>
+      <strong id="game-coins">0 文</strong>
+    </div>
+
+    <div class="message">
+      <p id="target-hint" class="hud" hidden></p>
+      <p id="depth-status" class="hud" role="status">正在加载柳湾…</p>
+    </div>
+
+    <div class="left-dock">
+      <div class="dock" role="group" aria-label="随身菜单">
+        <button type="button" id="game-bag">背包 <kbd>B</kbd></button>
+        <button type="button" id="game-ledger">物志 <kbd>J</kbd></button>
+        <button type="button" id="game-map">地图 <kbd>M</kbd></button>
+        <button type="button" id="game-saves">存档</button>
+      </div>
+      <div id="direction-pad" class="dock direction-pad" aria-label="移动方向" hidden>
+        <button type="button" data-direction="a" aria-label="向左">←</button>
+        <button type="button" data-direction="w" aria-label="向上">↑</button>
+        <button type="button" data-direction="s" aria-label="向下">↓</button>
+        <button type="button" data-direction="d" aria-label="向右">→</button>
+      </div>
+    </div>
+    <div class="right-dock">
+      <div class="dock camera" role="group" aria-label="镜头">
+        <button type="button" id="zoom-out" class="square" aria-label="缩小">−</button>
+        <button type="button" id="zoom-in" class="square" aria-label="放大">+</button>
+        <button type="button" id="directions" class="square" aria-label="方向键" aria-expanded="false">✥</button>
+      </div>
+      <div class="dock" role="group" aria-label="场景操作">
+        <button id="game-action" type="button">操作 <kbd>F</kbd></button>
+      </div>
+      <button type="button" id="game-speed" class="fast-forward" aria-label="快进 1 游戏小时" hidden>»</button>
+    </div>
+
+    <section id="hotbar" class="hotbar" aria-label="工具与物品快捷栏">
+      <p id="hotbar-selection" class="hotbar-selection hud"></p>
+      <div class="hotbar-frame hud">
+        <div id="hotbar-rows"></div>
+        <button id="hotbar-page" class="hotbar-page" type="button" aria-label="切换快捷栏排" title="切换快捷栏排（Tab）"><span id="hotbar-page-number"></span><kbd>Tab</kbd></button>
+      </div>
+    </section>
+
+    <dialog id="game-sheet" class="paper-sheet" aria-labelledby="sheet-title">
+      <header class="paper-heading">
+        <h2 id="sheet-title"></h2>
+        <button id="sheet-close" type="button" aria-label="关闭面板">×</button>
+      </header>
+      <div id="sheet-body"></div>
+      <p id="sheet-status" role="status" hidden></p>
+    </dialog>
+
+    <dialog id="game-review" class="paper-sheet day-review" aria-labelledby="review-title">
+      <header class="paper-heading"><h2 id="review-title">午夜日结</h2></header>
+      <div id="review-body"></div>
+      <footer class="sheet-actions">
+        <button type="button" id="review-saves">存档</button>
+        <button type="button" id="next-day" class="primary">进入次日</button>
+      </footer>
+    </dialog>
+    <input id="save-file" type="file" accept=".json,application/json" hidden>
+  </main>
+</body>
+</html>

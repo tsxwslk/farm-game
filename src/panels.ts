@@ -1,0 +1,339 @@
+import {
+  ENTRIES, HOTBAR_COLUMNS, ITEMS, KILN_COST, RECIPES, RESOURCES, SEEDS_PER_RADISH, STATIONS, TRADE,
+  type EntryId, type RecipeId, type Station,
+} from './content';
+import {
+  canBuild, canSubmit, claimJob, claimSeed, costs, hasMaterials, jobMeter, needsSeed,
+  saveSeed, startJob, submit, trade, tradeLimit, warnSale, type Game, type TradeItem,
+} from './game';
+import type { World } from './scene';
+import { describeSlot, makeSlotRow } from './hotbar';
+import { count, type SlotAddress, type Storage } from './inventory';
+
+export function node<T extends HTMLElement = HTMLElement>(id: string) {
+  return document.getElementById(id) as T;
+}
+
+export function element<K extends keyof HTMLElementTagNameMap>(tag: K, text?: string, className?: string) {
+  const child = document.createElement(tag);
+  if (text) child.textContent = text;
+  if (className) child.className = className;
+  return child;
+}
+
+export function button(label: string, action: () => void, disabled = false, primary = false) {
+  const control = element('button', label, primary ? 'primary' : undefined);
+  control.type = 'button';
+  control.disabled = disabled;
+  control.addEventListener('click', action);
+  return control;
+}
+
+function listRow(label: string, ...actions: HTMLElement[]) {
+  const row = element('li', undefined, 'sheet-row');
+  row.append(element('span', label), ...actions);
+  return row;
+}
+
+function setPressed(control: HTMLElement, pressed: boolean) {
+  control.setAttribute('aria-pressed', String(pressed));
+  return control;
+}
+
+export function inventoryPanel(game: Game, showWarehouse: boolean, source: SlotAddress | null,
+  select: (address: SlotAddress) => void, move: (from: SlotAddress, to: SlotAddress) => void,
+  equip: (index: number) => void, update: (message: string) => void, placement: (station: Station) => void) {
+  const storageNames = { bag: '背包', warehouse: '仓库' };
+  const grids = element('div', undefined, showWarehouse ? 'storage-grids storage-pair' : 'storage-grids');
+  for (const storage of (showWarehouse ? ['warehouse', 'bag'] : ['bag']) as Storage[]) {
+    const section = element('section', undefined, 'inventory-grid');
+    section.setAttribute('aria-label', storageNames[storage] + '格子');
+    const slots = game[storage];
+    const heading = element('h3', storageNames[storage] + ' ' + slots.filter(Boolean).length + ' / ' + slots.length, 'inventory-heading');
+    section.append(heading);
+    for (let start = 0; start < slots.length; start += HOTBAR_COLUMNS) {
+      const row = makeSlotRow(storage, start, select, storage === 'bag');
+      row.row.classList.toggle('active-inventory-row', storage === 'bag' && start / HOTBAR_COLUMNS === game.hotbarRow);
+      row.update(game, source, true);
+      section.append(row.row);
+    }
+    grids.append(section);
+  }
+
+  let dragged: SlotAddress | null = null;
+  const addressOf = (event: Event) => {
+    const slot = (event.target as HTMLElement).closest<HTMLButtonElement>('.inventory-slot');
+    return slot ? { slot, storage: slot.dataset.storage as Storage, index: Number(slot.dataset.index) } : null;
+  };
+  grids.addEventListener('dragstart', event => {
+    const address = addressOf(event);
+    if (!address || !game[address.storage][address.index] || !event.dataTransfer) return;
+    dragged = { storage: address.storage, index: address.index };
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', 'inventory-slot');
+    address.slot.classList.add('slot-moving');
+  });
+  grids.addEventListener('dragend', () => {
+    dragged = null;
+    grids.querySelector('.slot-moving')?.classList.remove('slot-moving');
+  });
+  grids.addEventListener('dragover', event => {
+    if (!dragged || !addressOf(event)) return;
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+  });
+  grids.addEventListener('drop', event => {
+    const destination = addressOf(event);
+    if (!dragged || !destination) return;
+    event.preventDefault();
+    const origin = dragged;
+    dragged = null;
+    grids.querySelector('.slot-moving')?.classList.remove('slot-moving');
+    move(origin, destination);
+  });
+
+  const item = source && game[source.storage][source.index];
+  const details = element('div', undefined, 'sheet-row inventory-details');
+  if (item && source) {
+    details.append(element('span', describeSlot(game, item) + ' · 点目标格移动'));
+    if (source.storage === 'bag') {
+      const actions = element('div', undefined, 'sheet-actions');
+      actions.append(button('选用', () => equip(source.index), false, true));
+      if (item.id === 'radish') {
+        actions.append(button('留种 ×' + SEEDS_PER_RADISH, () => update(saveSeed(game, source.index))));
+      }
+      details.append(actions);
+    }
+  } else {
+    details.append(element('span', '拖动一格，或先点物品，再点目标格。', 'sheet-note'));
+  }
+  if (showWarehouse) return [grids, details];
+  const crafting = element('ul', undefined, 'sheet-list');
+  crafting.append(
+    listRow('盐灶 · ' + costs(KILN_COST),
+      button(game.stations.kiln ? '已建造' : '选址', () => placement('kiln'), !canBuild(game, 'kiln'))),
+    listRow('腌菜缸 · 在盐灶烧制', button(game.stations.jar ? '已摆放' : '摆放', () => placement('jar'), !canBuild(game, 'jar'))),
+  );
+  return [grids, details, element('h3', '制作与摆放', 'section-title'), crafting];
+}
+
+export function stationPanel(game: Game, station: Station, update: (message: string) => void,
+  move: () => void) {
+  const list = element('ul', undefined, 'sheet-list');
+  const job = game.jobs[station];
+  if (job) {
+    const remaining = element('p', undefined, 'sheet-note');
+    remaining.id = 'job-remaining';
+    if (job.ready) {
+      remaining.textContent = '成品待领取';
+      return [remaining, button('领取' + ITEMS[RECIPES[job.recipe].output], () => update(claimJob(game, station)), false, true)];
+    }
+    const meter = element('progress', undefined, 'job-progress');
+    meter.id = 'job-progress';
+    meter.setAttribute('aria-label', RECIPES[job.recipe].label + '进度');
+    const { remaining: minutes, elapsed, duration } = jobMeter(job, game.minute);
+    meter.max = duration;
+    meter.value = elapsed;
+    remaining.textContent = RECIPES[job.recipe].label + ' · 剩 ' + minutes + ' 游戏分钟';
+    return [remaining, meter];
+  }
+  for (const id of Object.keys(RECIPES) as RecipeId[]) {
+    const recipe = RECIPES[id];
+    if (recipe.station !== station) continue;
+    list.append(listRow(recipe.label + ' · ' + costs(recipe.inputs),
+      button('开工', () => update(startJob(game, id)), !hasMaterials(game, recipe.inputs), true)));
+  }
+  const actions = element('div', undefined, 'sheet-actions');
+  actions.append(button('搬移' + STATIONS[station], move));
+  return [list, element('p', '在空闲时可调整摆放位置。', 'sheet-note'), actions];
+}
+
+export class TradingBook {
+  private side: 'sell' | 'buy' = 'sell';
+  private item: TradeItem = 'radish';
+  refresh = () => {};
+  focus = () => {};
+
+  render(parent: HTMLElement, game: Game, report: (message: string) => void) {
+    const redraw = () => {
+      this.render(parent, game, report);
+      this.focus();
+    };
+    const tabs = element('div', undefined, 'sheet-tabs');
+    for (const side of ['sell', 'buy'] as const) {
+      tabs.append(setPressed(button(side === 'sell' ? '出售' : '买入', () => {
+        this.side = side;
+        this.item = side === 'sell' ? 'radish' : 'seeds';
+        redraw();
+      }), side === this.side));
+    }
+    const balance = element('p', undefined, 'trade-summary');
+    const list = element('ul', undefined, 'sheet-list');
+    const stock: [TradeItem, HTMLElement][] = [];
+    const headings = element('div', undefined, 'trade-grid trade-grid-header');
+    headings.append(element('span', '物品'), element('span', '单价'), element('span', this.side === 'sell' ? '可出售' : '今日库存'));
+    for (const [id, price] of Object.entries(TRADE[this.side]) as [TradeItem, number][]) {
+      const row = element('li', undefined, 'trade-grid');
+      const available = element('span');
+      stock.push([id, available]);
+      row.append(setPressed(button(ITEMS[id], () => { this.item = id; redraw(); }), id === this.item),
+        element('span', price + ' 文'), available);
+      list.append(row);
+    }
+    const id = this.item;
+    const price = id === 'seeds' ? TRADE.buy.seeds : TRADE.sell[id];
+    const form = element('form', undefined, 'trade-form');
+    const label = element('label', '数量');
+    const quantity = element('input');
+    quantity.inputMode = 'numeric';
+    quantity.autocomplete = 'off';
+    quantity.value = tradeLimit(game, id) ? '1' : '';
+    quantity.setAttribute('aria-describedby', 'trade-limit');
+    label.htmlFor = quantity.id = 'trade-quantity';
+    const valueOf = () => {
+      const text = quantity.value.normalize('NFKC').trim();
+      return /^\d+$/.test(text) ? Number(text) : NaN;
+    };
+    const adjust = (delta: number) => {
+      const value = valueOf();
+      const limit = tradeLimit(game, id);
+      if (!limit) return;
+      quantity.value = String(Math.min(limit, Math.max(1, (Number.isSafeInteger(value) ? value : 0) + delta)));
+      this.refresh();
+    };
+    const subtract = button('−', () => adjust(-1));
+    subtract.setAttribute('aria-label', '减少数量');
+    const add = button('+', () => adjust(1));
+    add.setAttribute('aria-label', '增加数量');
+    const stepper = element('div', undefined, 'quantity-stepper');
+    stepper.append(label, subtract, quantity, add);
+    const total = element('output');
+    const confirm = element('button', this.side === 'sell' ? '确认出售' : '确认买入', 'primary');
+    confirm.type = 'submit';
+    const warning = element('p', '这份还可用于首条用途。', 'trade-warning');
+    const limitNote = element('p', undefined, 'sheet-note');
+    limitNote.id = 'trade-limit';
+    const seed = button('领取补种种子', () => { report(claimSeed(game)); this.refresh(); });
+    const archive = button('归档柳湾第一卷', () => { report(submit(game)); this.refresh(); });
+    const updateText = (node: HTMLElement, text: string) => {
+      if (node.textContent !== text) node.textContent = text;
+    };
+    this.refresh = () => {
+      const value = valueOf();
+      const hasQuote = Number.isSafeInteger(value) && Number.isSafeInteger(value * price) && value >= 1;
+      const limit = tradeLimit(game, id);
+      const valid = hasQuote && value <= limit;
+      confirm.disabled = !valid;
+      subtract.disabled = !limit || !hasQuote || value <= 1;
+      add.disabled = !limit || (hasQuote && value >= limit);
+      updateText(total, '合计 ' + (hasQuote ? value * price : 0) + ' 文');
+      warning.hidden = !valid || !warnSale(game, id, value);
+      updateText(limitNote, id === 'seeds'
+        ? limit ? '当前最多可买 ' + limit + ' 粒。' : '当前无可买数量，请查看库存、钱袋或背包。'
+        : limit ? '当前最多可卖 ' + limit + ' 份。' : '背包无可出售的此物。');
+      updateText(balance, '钱袋 ' + game.coins + ' 文');
+      for (const [item, available] of stock) {
+        updateText(available, String(item === 'seeds' ? game.seedStock : count(game, item)));
+      }
+      seed.hidden = !needsSeed(game);
+      updateText(archive, game.submitted ? '第一卷已归档' : '归档柳湾第一卷');
+      archive.disabled = game.submitted || !canSubmit(game);
+    };
+    this.focus = () => {
+      quantity.focus({ preventScroll: true });
+      quantity.select();
+    };
+    quantity.addEventListener('input', this.refresh);
+    quantity.addEventListener('keydown', event => {
+      const digit = /^Numpad([0-9])$/.exec(event.code)?.[1];
+      if (!digit || event.key === digit || event.altKey || event.ctrlKey || event.metaKey) return;
+      event.preventDefault();
+      const end = quantity.selectionEnd ?? quantity.value.length;
+      quantity.setRangeText(digit, quantity.selectionStart ?? end, end, 'end');
+      this.refresh();
+    });
+    form.append(stepper, total, confirm);
+    form.addEventListener('submit', event => {
+      event.preventDefault();
+      if (confirm.disabled) return;
+      const result = trade(game, id, valueOf());
+      if (result.ok) quantity.value = '';
+      this.refresh();
+      report(result.message);
+      this.focus();
+    });
+    const actions = element('div', undefined, 'sheet-actions');
+    actions.append(seed, archive);
+    parent.replaceChildren(tabs, balance, headings, list, form, limitNote, warning,
+      element('h3', '田记所', 'section-title'), actions);
+    this.refresh();
+  }
+}
+
+export function ledgerPanel(game: Game, selected: EntryId, select: (id: EntryId) => void,
+  assetUrl: (file: string) => string) {
+  const spread = element('div', undefined, 'ledger-spread');
+  const index = element('nav', undefined, 'ledger-index');
+  index.setAttribute('aria-label', '物志分册');
+  let section = '';
+  for (const [id, rule] of Object.entries(ENTRIES) as [EntryId, typeof ENTRIES[EntryId]][]) {
+    if (rule.section !== section) {
+      section = rule.section;
+      index.append(element('h3', section, 'section-title'));
+    }
+    index.append(setPressed(button(game.entries[id] ? ITEMS[id] : '待发现 · ' + ITEMS[id], () => select(id)), selected === id));
+  }
+  const entry = game.entries[selected];
+  const rule = ENTRIES[selected];
+  const page = element('article', undefined, 'ledger-page');
+  page.append(element('p', rule.section, 'sheet-note'), element('h3', ITEMS[selected]));
+  if (entry && selected === 'radish') {
+    const image = element('img');
+    image.src = assetUrl('assets/cherry-radish/05-inventory.png');
+    image.alt = '樱桃萝卜';
+    page.append(image);
+  }
+  page.append(element('p', entry?.lit ? '已上锚' : entry ? '已发现' : '未发现', 'sheet-note'));
+  page.append(element('p', entry ? rule.use : rule.clue));
+  if (entry?.lit && rule.reward) page.append(element('p', '已结稿酬 ' + rule.reward + ' 文'));
+  if (entry?.deadline !== null && entry?.deadline !== undefined && !entry.lit) {
+    const remaining = element('p', undefined, 'sheet-note');
+    remaining.id = 'ledger-remaining';
+    page.append(remaining);
+  }
+  if (game.submitted) page.append(element('p', '柳湾第一卷已归档。', 'sheet-note'));
+  spread.append(index, page);
+  return spread;
+}
+
+export function mapPanel(world: World, game: Game) {
+  const map = element('div', undefined, 'regional-map');
+  const canvas = element('canvas');
+  canvas.width = world.cols * 8;
+  canvas.height = world.rows * 8;
+  const ctx = canvas.getContext('2d')!;
+  const colors: Record<string, string> = { grass: '#85985c', bare: '#c9a777', path: '#d0af7c', water: '#639c9c' };
+  world.cells.forEach((terrain, index) => {
+    ctx.fillStyle = colors[terrain];
+    ctx.fillRect(index % world.cols * 8, Math.floor(index / world.cols) * 8, 8, 8);
+  });
+  map.append(canvas);
+  const caption = element('p', '点击标注查看地点。', 'sheet-note');
+  function marker(name: string, x: number, y: number, mark: string, className?: string) {
+    const pin = button(mark, () => { caption.textContent = name; });
+    if (className) pin.className = className;
+    pin.setAttribute('aria-label', name);
+    pin.title = name;
+    pin.style.left = (x + .5) / world.cols * 100 + '%';
+    pin.style.top = (y + .5) / world.rows * 100 + '%';
+    map.append(pin);
+  }
+  marker('田记所', 6, 5, '所');
+  marker('柳湾河', 30, 10, '河');
+  if (game.entries.rockSalt) marker('岩盐发现处', ...RESOURCES['buried-salt'].tile, '盐');
+  for (const [station, position] of Object.entries(game.stations) as [Station, [number, number]][]) {
+    marker(STATIONS[station], ...position, station === 'kiln' ? '灶' : '缸');
+  }
+  marker('当前位置', ...game.position, '●', 'map-player');
+  return [map, caption];
+}

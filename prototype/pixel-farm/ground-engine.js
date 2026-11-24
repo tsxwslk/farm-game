@@ -23,7 +23,7 @@
     }
     return result;
   }
-  function createWorld() {
+  function createWorld({untouchedFields = false} = {}) {
     const cols = 34, rows = 20;
     const cells = Array(cols * rows).fill('grass');
     function rect(x, y, width, height, kind) {
@@ -52,8 +52,10 @@
     rect(17, 11, 1, 5, 'path');
     rect(17, 15, 3, 1, 'path');
     rect(21, 16, 1, 4, 'path');
-    rect(3, 7, 8, 4, 'dry');
-    rect(6, 14, 8, 2, 'dry');
+    if (!untouchedFields) {
+      rect(3, 7, 8, 4, 'dry');
+      rect(6, 14, 8, 2, 'dry');
+    }
 
     const shoreColumns = [29, 29, 28, 28, 27, 27, 26, 26, 26, 26,
                           27, 27, 28, 28, 28, 27, 27, 26, 25, 24];

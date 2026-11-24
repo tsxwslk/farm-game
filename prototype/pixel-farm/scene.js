@@ -1,23 +1,25 @@
-(() => {
-  'use strict';
+'use strict';
+
+window.startLiuwanScene = function ({layout, jobMeter, assetUrl = file => file, createControls = window.createLiuwanControls} = {}) {
 
   const E = window.GroundEngine;
   const G = window.LiuwanGame;
   const {TILE} = E;
   const D = window.DepthAssets;
   const ground = window.GroundPainter;
-  const world = E.createWorld();
+  const world = E.createWorld({untouchedFields: Boolean(layout)});
   const W = world.cols * TILE;
   const H = world.rows * TILE;
   const BED_HEIGHT = 4;
   const images = {};
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 
   const element = id => document.getElementById(id);
   const canvas = element('depth-scene');
   const ctx = canvas.getContext('2d', {alpha: false});
   const stage = element('depth-stage');
   const status = element('depth-status');
-  const zoom = {level: 0, overview: false, scales: [1, 1.4, 2, 3]};
+  const zoom = {level: 0, overview: false, scales: layout ? [1, 1.15, 1.33, 1.55, 1.8, 2.1, 2.45, 2.85] : [1, 1.4, 2, 3]};
   const view = {x: 0, y: 0, left: 0, top: 0, width: W, height: H};
   let painter;
   let previousGround = '';
@@ -56,7 +58,7 @@
   });
   const cropFiles = Object.fromEntries(G.CROP_STAGES.filter(stage => stage.file)
     .map(stage => [stage.id, 'assets/cherry-radish/' + stage.file]));
-  const fixedActors = [
+  const demoActors = [
     at('cottage', 6.2, 5.65), at('crate', 8.25, 5.4),
     at('mark', 10.15, 3.9, {hint: '□□萝卜入瓮', text: '樱桃萝卜入瓮'}),
     at('seedBox', 16.4, 4.8),
@@ -72,6 +74,12 @@
     at('willow', 21.85, 19.3, {forgotten: true}),
     at('jar', 19.9, 16.5, {forgotten: true}),
   ];
+  const fixedActors = layout ? [
+    ...demoActors.filter(actor => actor.kind === 'cottage' || actor.kind === 'crate' ||
+      (actor.kind === 'willow' && actor.x >= 23 * TILE)),
+    ...Object.entries(layout.resources).map(([id, resource]) =>
+      at(resource.actor, resource.tile[0] + .5, resource.tile[1] + .62, {id, resource})),
+  ] : demoActors;
   let actors = fixedActors;
 
   function bedColor(cells, x, y) {
@@ -100,6 +108,7 @@
       groundLayer.fillRect(plot.x + 5, plot.y + 54, 54, 6);
     }
     painter.field(groundLayer, {...world, cells}, BED_HEIGHT);
+    if (layout) return;
     groundLayer.fillStyle = '#526a3690';
     for (const plot of world.plots) {
       if (game.plots[plot.id].tilled) continue;
@@ -126,6 +135,11 @@
       rect('#798078', -12, -26, 25, 4);
       rect('#d1b898', -6, -15, 13, 11);
       rect('#50382a', -4, -13, 9, 9);
+    } else if (kind === 'clay') {
+      const exposed = !game.depleted[actor.id];
+      rect(exposed ? '#978676' : '#a6957f', -12, -4, 24, 8);
+      rect(exposed ? '#7d6d60' : '#94816b', -8, -2, 15, 4);
+      rect('#aa9680', -7, 3, 12, 2);
     } else if (kind === 'mark') {
       const label = game.submitted ? actor.text : actor.hint;
       const width = label.length * 10 + 8;
@@ -170,9 +184,97 @@
     }
   }
 
-  function drawScene(game, position, hovered, placement) {
+  function drawWater(phase) {
+    const lastRow = Math.min(world.rows, Math.ceil((view.y + view.height) / TILE));
+    const lastCol = Math.min(world.cols, Math.ceil((view.x + view.width) / TILE));
+    for (let row = Math.floor(view.y / TILE); row < lastRow; row++) {
+      const shore = world.shoreColumns[row];
+      for (let col = Math.max(shore + 1, Math.floor(view.x / TILE)); col < lastCol; col++) {
+        const pattern = E.hash(col, row);
+        const cycle = (phase + pattern % 42) % 42 / 42;
+        const x = col * TILE + 2 + pattern % 12 + Math.round(cycle * 5);
+        const y = row * TILE + 3 + pattern % 12 + Math.round(cycle * 10);
+        const length = 5 + Math.round(Math.sin(cycle * Math.PI) * (6 + pattern % 5));
+        scene.globalAlpha = .7 * Math.sin(cycle * Math.PI);
+        scene.fillStyle = '#c3e0cd';
+        scene.fillRect(x, y, length, 1);
+        scene.fillRect(x + 3, y + 4, 3 + pattern % 4, 1);
+        scene.fillStyle = '#518b8c';
+        scene.fillRect(x + 2, y + 1, length - 2, 1);
+      }
+    }
+    scene.globalAlpha = 1;
+  }
+
+  function drawFigure(actor, image, x, y, motion) {
+    const moving = motion.step !== null && !reducedMotion.matches;
+    const stride = moving ? Math.round(Math.sin(motion.step * Math.PI) * 4) : 0;
+    const lead = (actor.x + actor.y) % (2 * TILE) < TILE ? 1 : -1;
+    scene.save();
+    scene.translate(x + image.width / 2, y);
+    const [dx, dy] = motion.facing;
+    if (dx) scene.scale(dx, 1);
+    const left = -image.width / 2;
+    if (!stride) {
+      scene.drawImage(image, left, 0);
+    } else {
+      const sway = dx ? stride * lead : 0;
+      scene.drawImage(image, 0, 0, image.width, 58, left + Math.round(sway / 2), -Math.round(stride / 2), image.width, 58);
+      scene.drawImage(image, 0, 58, 20, 19, left - sway, 58 - Math.max(0, stride * lead * (dy || 1)), 20, 19);
+      scene.drawImage(image, 20, 58, 20, 19, sway, 58 - Math.max(0, -stride * lead * (dy || 1)), 20, 19);
+    }
+    scene.restore();
+  }
+
+  function drawWorkImpact(impact, hitFrame) {
+    const {point: [x, y], tool} = impact;
+    const travel = Math.min(1, hitFrame / 8);
+    const colors = {hoe: ['#d1a573', '#735233'], pick: ['#ddd9bd', '#847d62'],
+      axe: ['#e2bb7c', '#9b6a3f'], can: ['#d5eeee', '#629f9f']};
+    scene.globalAlpha = 1 - travel * .85;
+    for (let i = 0; i < 7; i++) {
+      const dx = (i - 3) * (4 + travel * 7);
+      const dy = Math.sin(travel * Math.PI) * (5 + (i % 3) * 5);
+      scene.fillStyle = colors[tool][i % 2];
+      scene.fillRect(Math.round(x + dx), Math.round(y - dy - i % 2 * 5), i % 2 + 2, 2);
+    }
+    scene.globalAlpha = 1;
+  }
+
+  function drawStationStatus(actor, game, phase) {
+    const job = game.jobs[actor.kind];
+    const {x, y} = actor;
+    const {remaining, elapsed, duration} = jobMeter(job, game.minute);
+    if (actor.kind === 'kiln' && !job.ready && !reducedMotion.matches) {
+      scene.fillStyle = phase % 5 < 3 ? '#ffb567' : '#d98145';
+      scene.fillRect(x - 3, y - 8, 7, 3);
+      for (let i = 0; i < 3; i++) {
+        const rise = (phase + i * 6) % 18;
+        scene.globalAlpha = (1 - rise / 18) * .7;
+        scene.fillStyle = '#f8e7bb';
+        scene.fillRect(x + Math.round(Math.sin(rise / 3) * 5), y - 27 - rise, 3 + (rise >> 3), 2);
+      }
+      scene.globalAlpha = 1;
+    }
+    const text = job.ready ? '可领取' : '剩 ' + remaining + ' 分';
+    const width = 62;
+    const top = y + 9;
+    scene.fillStyle = '#302d23ef';
+    scene.fillRect(x - width / 2, top, width, 19);
+    scene.fillStyle = '#f3d692';
+    scene.textAlign = 'center';
+    scene.font = 'bold 11px system-ui, sans-serif';
+    scene.fillText(text, x, top + 11);
+    scene.fillStyle = '#645640';
+    scene.fillRect(x - 27, top + 14, 54, 3);
+    scene.fillStyle = '#e6bd6d';
+    scene.fillRect(x - 27, top + 14, Math.round(54 * elapsed / duration), 3);
+  }
+
+  function drawScene(game, position, hovered, placement, motion, phase, hitFrame) {
     drawBeds(game);
-    scene.drawImage(groundLayer.canvas, 0, 0);
+    scene.drawImage(groundLayer.canvas, view.x, view.y, view.width, view.height, view.x, view.y, view.width, view.height);
+    if (layout && !reducedMotion.matches) drawWater(phase);
 
     const tileX = Math.floor(position[0] + .5), tileY = Math.floor(position[1] + .5);
     const x = Math.round((position[0] + .5) * TILE);
@@ -181,7 +283,9 @@
     const level = plot && game.plots[plot.id].tilled ? BED_HEIGHT : 0;
     const person = {kind: 'figure', x, y, level};
     const visible = actors.filter(actor => (game.submitted || !actor.forgotten) &&
-      (actor.kind !== 'salt' || game.minute >= game.mineReady));
+      (layout || actor.kind !== 'salt' || game.minute >= game.mineReady) &&
+      actor.x + 128 > view.x && actor.x - 128 < view.x + view.width &&
+      actor.y + 32 > view.y && actor.y - 128 < view.y + view.height);
     visible.push(person);
     for (const plot of world.plots) {
       const stage = G.cropStage(game, game.plots[plot.id]);
@@ -199,29 +303,67 @@
         drawCrop(actor.plot, actor.stage);
         continue;
       }
-      const sprite = sprites[actor.kind];
+      const kind = actor.kind === 'salt' && layout && !game.strikes[actor.id] && !game.entries.rockSalt ? 'stone' : actor.kind;
+      const sprite = sprites[kind];
       if (!sprite) {
         pixelProp(actor, game);
         continue;
       }
-      const image = images[actor.kind];
+      const image = images[kind];
       const x = actor.x - sprite.anchor[0], y = actor.y - sprite.anchor[1] - actor.level;
       if (sprite.frameSize) {
         const size = sprite.frameSize;
         const column = E.hash(actor.x, actor.y) % sprite.frames;
         scene.drawImage(image, column * size, 0, size, size, x, y, size, size);
+      } else if (layout && kind === 'figure') {
+        drawFigure(actor, image, x, y, motion);
       } else {
         scene.drawImage(image, x, y);
       }
     }
-    for (const actor of actors) {
-      if (!game.jobs[actor.kind]) continue;
-      const recipe = G.RECIPES[actor.kind];
-      const progress = 1 - (game.jobs[actor.kind].at - game.minute) / recipe.duration;
+    if (layout && game.action) {
+      const swing = Math.max(0, Math.min(3, Math.floor((game.action.at - game.minute) * 22)));
+      scene.save();
+      scene.translate(person.x + 5, person.y - person.level - 9);
+      scene.rotate(reducedMotion.matches ? 0 : swing * -.58 + .24);
+      scene.fillStyle = '#754728';
+      scene.fillRect(-1, -12, 2, 13);
+      scene.fillStyle = '#77766a';
+      scene.fillRect(-4, -13, 8, 3);
+      scene.restore();
+    }
+    if (layout && motion?.hit && !reducedMotion.matches) {
+      drawWorkImpact(motion.hit, hitFrame);
+    }
+    for (const actor of visible) {
+      const job = game.jobs[actor.kind];
+      if (!job) continue;
+      if (layout) {
+        drawStationStatus(actor, game, phase);
+        continue;
+      }
+      const progress = 1 - (job.at - game.minute) / G.RECIPES[actor.kind].duration;
       scene.fillStyle = '#354639';
       scene.fillRect(actor.x - 12, actor.y + 4, 24, 4);
       scene.fillStyle = '#edd48b';
       scene.fillRect(actor.x - 11, actor.y + 5, Math.round(progress * 22), 2);
+    }
+    if (layout && hovered && motion.progress) {
+      const {done, total} = motion.progress;
+      if (done) {
+        const plot = hovered.kind === 'plot' ? world.plots[hovered.id] : null;
+        const actor = actors.find(candidate => candidate.id === hovered.id);
+        const px = plot ? plot.x + TILE : actor?.x;
+        const py = plot ? plot.y + TILE + 14 : actor?.y;
+        if (px !== undefined && py !== undefined) {
+          scene.fillStyle = '#352e20';
+          scene.fillRect(px - total * 5 - 1, py + 6, total * 10 + 2, 6);
+          for (let i = 0; i < total; i++) {
+            scene.fillStyle = i < done ? '#f0d798' : '#887750';
+            scene.fillRect(px - total * 5 + i * 10 + 1, py + 7, 8, 4);
+          }
+        }
+      }
     }
     if (placement?.tile) {
       const [px, py] = placement.tile.map(value => value * TILE);
@@ -240,15 +382,7 @@
     }
   }
 
-  function draw(game, position, hovered, placement) {
-    const signature = JSON.stringify([position, hovered?.id, game.stations, placement, game.submitted, game.minute >= game.mineReady,
-      game.plots.map(plot => G.cropStage(game, plot)), Object.entries(game.jobs).map(([station, job]) => [station, Math.ceil(job.at - game.minute)])]);
-    const changed = signature !== previousFrame;
-    if (changed) {
-      previousFrame = signature;
-      drawScene(game, position, hovered, placement);
-    }
-
+  function draw(game, position, hovered, placement, motion) {
     const width = stage.clientWidth, height = stage.clientHeight;
     if (width < 1 || height < 1) return;
     const scale = zoom.overview
@@ -263,8 +397,18 @@
     view.x = Math.round(Math.max(0, Math.min(W - view.width, (position[0] + .5) * TILE - view.width / 2)));
     view.y = Math.round(Math.max(0, Math.min(H - view.height, (position[1] + .5) * TILE - view.height / 2)));
     const viewport = [pixelsWide, pixelsHigh, view.x, view.y].join('/');
-    if (!changed && viewport === previousView) return;
+    const phase = layout && !reducedMotion.matches ? Math.floor(game.minute * 12) : 0;
+    const hitFrame = motion?.hit ? Math.floor((game.minute - motion.hit.minute) * 20) : 0;
+    const swingFrame = layout && game.action ? Math.floor((game.action.at - game.minute) * 22) : 0;
+    const signature = JSON.stringify([position, hovered?.kind, hovered?.id, game.stations, placement, game.submitted,
+      layout ? [game.strikes, game.depleted, Boolean(game.entries.rockSalt), game.action?.key, swingFrame,
+        phase, reducedMotion.matches, motion.facing, motion.hit, hitFrame] : game.minute >= game.mineReady,
+      game.plots.map(plot => G.cropStage(game, plot)), Object.entries(game.jobs).map(([station, job]) =>
+        [station, Math.ceil(job.at - game.minute), job.ready, layout ? Math.floor((game.minute - job.started) * 12) : null])]);
+    if (signature === previousFrame && viewport === previousView) return;
+    previousFrame = signature;
     previousView = viewport;
+    drawScene(game, position, hovered, placement, motion, phase, hitFrame);
     if (canvas.width !== pixelsWide) canvas.width = pixelsWide;
     if (canvas.height !== pixelsHigh) canvas.height = pixelsHigh;
     ctx.imageSmoothingEnabled = false;
@@ -276,16 +420,40 @@
                   view.left, view.top, view.width, view.height);
   }
 
-  const targets = [
-    {kind: 'archive', site: 'archive', actor: 'cottage', label: '提交物志', points: [[6, 6], [7, 6]]},
+  const archive = {kind: 'archive', site: 'archive', actor: 'cottage', label: '田记所', points: [[6, 6], [7, 6]]};
+  const stations = [
+    {kind: 'kiln', actor: 'kiln', label: '盐灶', points: []},
+    {kind: 'jar', actor: 'jar', label: '腌菜缸', points: []},
+  ];
+  const plots = world.plots.map(plot => {
+    const x = plot.x / TILE, y = plot.y / TILE;
+    return {kind: 'plot', id: plot.id, points: [[x, y], [x + 1, y], [x, y + 1], [x + 1, y + 1]]};
+  });
+  const waterRows = layout ? world.shoreColumns.map((shore, y) => {
+    const points = [];
+    for (let x = world.bankStarts[y]; x < shore; x++) {
+      if (adjacent([x, y]).some(([nx, ny]) => nx >= world.shoreColumns[ny])) points.push([x, y]);
+    }
+    return {kind: 'water', id: 'river-' + y, label: '河流', points};
+  }) : [];
+  const river = {kind: 'water', id: 'river', label: '河流', points: waterRows.flatMap(target => target.points)};
+  const targets = layout ? [
+    archive, ...stations,
+    {kind: 'chest', actor: 'crate', label: '仓库', points: adjacent([8, 5])},
+    river,
+    ...Object.entries(layout.resources).map(([id, resource]) => ({
+      kind: 'resource', id, actor: resource.actor, tile: resource.tile,
+      label: resource.actor === 'clay' ? '黏土' : resource.actor === 'willow' ? '柳树' : '岩石',
+      points: resource.actor === 'clay' ? [resource.tile] : adjacent(resource.tile),
+    })),
+    ...plots,
+  ] : [
+    {...archive, label: '提交物志'},
     {kind: 'kiln', actor: 'kiln', label: '制粗盐', points: []},
     {kind: 'jar', actor: 'jar', label: '腌菜', points: []},
     {kind: 'salt', site: 'salt', actor: 'salt', label: '敲岩盐', points: [[21, 6], [22, 5]]},
     {kind: 'forage', site: 'woods', actor: 'seedBox', label: '收集种子', points: [[16, 5]]},
-    ...world.plots.map(plot => {
-      const x = plot.x / TILE, y = plot.y / TILE;
-      return {kind: 'plot', id: plot.id, points: [[x, y], [x + 1, y], [x, y + 1], [x + 1, y + 1]]};
-    }),
+    ...plots,
   ];
   const blocked = new Set();
   const scenery = new Set();
@@ -295,7 +463,7 @@
     for (let x = 4; x <= 7; x++) scenery.add(index([x, y]));
   }
   for (const actor of fixedActors) {
-    if (actor.kind === 'cottage') continue;
+    if (actor.kind === 'cottage' || actor.resource) continue;
     const cell = index([Math.floor(actor.x / TILE), Math.floor(actor.y / TILE)]);
     (actor.forgotten ? restoredScenery : scenery).add(cell);
   }
@@ -304,44 +472,69 @@
     return [[x, y + 1], [x - 1, y], [x + 1, y], [x, y - 1]];
   }
 
-  function obstacles(stations, submitted) {
-    return [...scenery, ...(submitted ? restoredScenery : []), ...Object.values(stations).map(index)];
+  function obstacles(stations, game) {
+    const resources = layout ? fixedActors.filter(actor => actor.resource && actor.kind !== 'clay' && !game.depleted[actor.id])
+      .map(actor => index(actor.resource.tile)) : [];
+    return [...scenery, ...(game.submitted ? restoredScenery : []), ...resources, ...Object.values(stations).map(index)];
   }
 
   function setStations(game) {
-    actors = [...fixedActors, ...Object.entries(game.stations).map(([kind, [x, y]]) => at(kind, x + .5, y + .6))];
+    actors = [
+      ...fixedActors.filter(actor => !actor.resource || actor.kind === 'clay' || !game.depleted[actor.id]),
+      ...Object.entries(game.stations).map(([kind, [x, y]]) => at(kind, x + .5, y + .6)),
+    ];
     blocked.clear();
-    for (const cell of obstacles(game.stations, game.submitted)) blocked.add(cell);
+    for (const cell of obstacles(game.stations, game)) blocked.add(cell);
     for (const target of targets) {
       if (game.stations[target.kind]) target.points = adjacent(game.stations[target.kind]);
+      else if (layout && ['kiln', 'jar'].includes(target.kind)) target.points = [];
     }
   }
 
   function canPlace(game, kind, tile) {
     if (!G.passable(world, scenery, ...tile) || restoredScenery.has(index(tile))) return false;
     if (index(tile) === index(game.position)) return false;
-    if (E.family(world.cells[index(tile)]) === 'tilled') return false;
+    if (layout) {
+      const plot = E.plotAt(world, tile[0] * TILE, tile[1] * TILE);
+      if (plot && game.plots[plot.id].tilled) return false;
+      if (fixedActors.some(actor => actor.resource &&
+        (actor.resource.renews || !game.depleted[actor.id]) && index(actor.resource.tile) === index(tile))) return false;
+      if (archive.points.some(point => index(point) === index(tile))) return false;
+    } else if (E.family(world.cells[index(tile)]) === 'tilled') return false;
     if (Object.entries(game.stations).some(([id, point]) => id !== kind && index(tile) === index(point))) return false;
 
     const stations = {...game.stations, [kind]: tile};
-    const occupied = new Set(obstacles(stations, game.submitted));
-    return targets.filter(target => target.kind !== 'plot').every(target => {
+    const occupied = new Set(obstacles(stations, game));
+    return targets.filter(target => target.kind !== 'plot' &&
+      (!layout || target.kind !== 'resource' || !game.depleted[target.id]) &&
+      (!layout || target.points.length || stations[target.kind])).every(target => {
       const points = stations[target.kind] ? adjacent(stations[target.kind]) : target.points;
       return G.routeTo(world, occupied, game.position, points) !== null;
     });
   }
 
-  function pick(x, y) {
+  function pick(x, y, tool) {
+    if (layout) {
+      const col = Math.floor(x / TILE), row = Math.floor(y / TILE);
+      const water = waterRows[row];
+      if (water && (col >= world.shoreColumns[row] ||
+        (tool === 'can' && water.points.some(([bank]) => bank === col)))) return water;
+    }
     for (const target of targets) {
       if (!target.actor) continue;
-      const actor = actors.find(item => item.kind === target.actor && !item.forgotten);
+      const actor = actors.find(item => item.kind === target.actor && !item.forgotten &&
+        (target.kind !== 'resource' || item.id === target.id));
+      if (!actor) continue;
       const sprite = sprites[actor.kind];
       const image = images[actor.kind];
       if (sprite) {
-        const inset = actor.kind === 'jar' || actor.kind === 'salt' ? 9 : 4;
+        const rock = actor.kind === 'salt' || actor.kind === 'stone';
+        const inset = rock ? 7 : actor.kind === 'jar' ? 9 : 4;
         const left = actor.x - sprite.anchor[0] + inset;
-        const top = actor.y - sprite.anchor[1] + (actor.kind === 'salt' ? 20 : 6);
-        if (x >= left && x < left + image.width - inset * 2 && y >= top && y <= actor.y) return target;
+        const top = actor.y - sprite.anchor[1] + (rock ? 23 : actor.kind === 'willow' ? 45 : 6);
+        if (x >= left && x < left + (sprite.frameSize ?? image.width) - inset * 2 && y >= top && y <= actor.y) return target;
+      } else if (actor.kind === 'clay') {
+        if (Math.abs(x - actor.x) <= 15 && Math.abs(y - actor.y) <= 10) return target;
       } else if (x >= actor.x - 16 && x <= actor.x + 17 && y >= actor.y - 26 && y <= actor.y) {
         return target;
       }
@@ -359,13 +552,15 @@
     const image = new Image();
     image.onload = () => { images[key] = image; resolve(); };
     image.onerror = () => reject(new Error('未能加载 ' + file));
-    image.src = file;
+    image.src = assetUrl(file);
   }))).then(() => {
     painter = ground.create(images);
     painter.base(base, world);
-    window.createLiuwanControls({world, canvas, view, zoom, targets, blocked, draw, pick, setStations, canPlace});
+    return createControls({world, canvas, view, zoom, targets, blocked, draw, pick, setStations, canPlace});
   }).catch(error => {
     status.textContent = error.message;
     status.setAttribute('role', 'alert');
   });
-})();
+};
+
+if (window.createLiuwanControls) window.startLiuwanScene();
