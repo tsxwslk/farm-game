@@ -58,6 +58,8 @@ window.startLiuwanScene = function ({layout, jobMeter, assetUrl = file => file, 
   });
   const cropFiles = Object.fromEntries(G.CROP_STAGES.filter(stage => stage.file)
     .map(stage => [stage.id, 'assets/cherry-radish/' + stage.file]));
+  const chestTile = [9, 5];
+  const chestPassage = [8, 5];
   const demoActors = [
     at('cottage', 6.2, 5.65), at('crate', 8.25, 5.4),
     at('mark', 10.15, 3.9, {hint: '□□萝卜入瓮', text: '樱桃萝卜入瓮'}),
@@ -75,8 +77,9 @@ window.startLiuwanScene = function ({layout, jobMeter, assetUrl = file => file, 
     at('jar', 19.9, 16.5, {forgotten: true}),
   ];
   const fixedActors = layout ? [
-    ...demoActors.filter(actor => actor.kind === 'cottage' || actor.kind === 'crate' ||
+    ...demoActors.filter(actor => actor.kind === 'cottage' ||
       (actor.kind === 'willow' && actor.x >= 23 * TILE)),
+    at('crate', chestTile[0] + .5, chestTile[1] + .4),
     ...Object.entries(layout.resources).map(([id, resource]) =>
       at(resource.actor, resource.tile[0] + .5, resource.tile[1] + .62, {id, resource})),
   ] : demoActors;
@@ -439,7 +442,7 @@ window.startLiuwanScene = function ({layout, jobMeter, assetUrl = file => file, 
   const river = {kind: 'water', id: 'river', label: '河流', points: waterRows.flatMap(target => target.points)};
   const targets = layout ? [
     archive, ...stations,
-    {kind: 'chest', actor: 'crate', label: '仓库', points: adjacent([8, 5])},
+    {kind: 'chest', actor: 'crate', label: '仓库', tile: chestTile, points: adjacent(chestTile)},
     river,
     ...Object.entries(layout.resources).map(([id, resource]) => ({
       kind: 'resource', id, actor: resource.actor, tile: resource.tile,
@@ -486,8 +489,9 @@ window.startLiuwanScene = function ({layout, jobMeter, assetUrl = file => file, 
     blocked.clear();
     for (const cell of obstacles(game.stations, game)) blocked.add(cell);
     for (const target of targets) {
-      if (game.stations[target.kind]) target.points = adjacent(game.stations[target.kind]);
-      else if (layout && ['kiln', 'jar'].includes(target.kind)) target.points = [];
+      if (target.kind !== 'kiln' && target.kind !== 'jar') continue;
+      target.tile = game.stations[target.kind];
+      target.points = target.tile ? adjacent(target.tile) : [];
     }
   }
 
@@ -495,6 +499,7 @@ window.startLiuwanScene = function ({layout, jobMeter, assetUrl = file => file, 
     if (!G.passable(world, scenery, ...tile) || restoredScenery.has(index(tile))) return false;
     if (index(tile) === index(game.position)) return false;
     if (layout) {
+      if (index(tile) === index(chestPassage)) return false;
       const plot = E.plotAt(world, tile[0] * TILE, tile[1] * TILE);
       if (plot && game.plots[plot.id].tilled) return false;
       if (fixedActors.some(actor => actor.resource &&
@@ -516,6 +521,9 @@ window.startLiuwanScene = function ({layout, jobMeter, assetUrl = file => file, 
   function pick(x, y, tool) {
     if (layout) {
       const col = Math.floor(x / TILE), row = Math.floor(y / TILE);
+      const facility = targets.find(target => target.kind !== 'resource' &&
+        target.tile?.[0] === col && target.tile[1] === row);
+      if (facility) return facility;
       const water = waterRows[row];
       if (water && (col >= world.shoreColumns[row] ||
         (tool === 'can' && water.points.some(([bank]) => bank === col)))) return water;

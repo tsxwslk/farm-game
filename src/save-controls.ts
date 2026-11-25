@@ -22,20 +22,45 @@ function errorText(error: unknown) {
 
 export function createSaveControls(scene: Scene, body: HTMLElement, current: () => Game,
   restore: (game: Game) => void, visible: () => boolean, report: (message: string) => void) {
-  const { world, blocked, setStations, canPlace } = scene;
+  const { world, targets, blocked, setStations, canPlace } = scene;
+  const { passable } = window.LiuwanGame;
+  const chest = targets.find(target => target.kind === 'chest');
   const picker = node<HTMLInputElement>('save-file');
   let store: Awaited<ReturnType<typeof openSaves>> | undefined;
   let gameId = newId();
   let busy = false;
 
+  function relocateFromChest(game: Game) {
+    if (!chest?.tile) return;
+    const [chestX, chestY] = chest.tile;
+    const atChest = ([x, y]: Point) => x === chestX && y === chestY;
+    if (atChest(game.position)) {
+      const landing = chest.points.find(point => passable(world, blocked, ...point));
+      if (!landing) throw new Error('货箱周围没有可恢复的角色位置。');
+      game.position = landing;
+      game.action = null;
+    }
+    for (const [kind, point] of Object.entries(game.stations) as [Station, Point][]) {
+      if (!atChest(point)) continue;
+      const distance = ([x, y]: Point) => Math.abs(x - chestX) + Math.abs(y - chestY);
+      const nearby = world.cells.map<Point>((_, index) => [index % world.cols, Math.floor(index / world.cols)])
+        .sort((a, b) => distance(a) - distance(b));
+      const space = nearby.find(tile => canPlace(game, kind, tile));
+      if (!space) throw new Error('货箱附近没有可恢复的设施位置。');
+      game.stations[kind] = space;
+      setStations(game);
+    }
+  }
+
   function check(data: unknown) {
     const save = validateSave(data, world);
     try {
       setStations(save.game);
+      relocateFromChest(save.game);
       for (const [kind, point] of Object.entries(save.game.stations) as [Station, Point][]) {
         if (!canPlace(save.game, kind, point)) throw new Error('存档里的设施位置不可用。');
       }
-      if (!window.LiuwanGame.passable(world, blocked, ...save.game.position)) throw new Error('存档里的角色位置不可用。');
+      if (!passable(world, blocked, ...save.game.position)) throw new Error('存档里的角色位置不可用。');
     } finally {
       setStations(current());
     }

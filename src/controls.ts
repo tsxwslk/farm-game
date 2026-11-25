@@ -93,19 +93,17 @@ export async function createControls(scene: Scene) {
   }
 
   function activeTarget() {
-    const tool = equippedTool(game);
-    if (tool === 'can') {
-      const aimed = selected ?? hovered;
-      if (aimed && isNear(aimed) && targetAction(game, aimed).tool === 'can') return aimed;
-      if (river && isNear(river)) return river;
-    }
-    if (selected) return isNear(selected) ? selected : undefined;
+    if (selected && isNear(selected)) return selected;
     if (hovered && isNear(hovered)) return hovered;
+
+    const tool = equippedTool(game);
     const nearby = targets.filter(target => isNear(target) &&
       (target.kind !== 'resource' || !game.depleted[targetKey(target)]));
-    return nearby.find(target => tool && targetAction(game, target).tool === tool) ??
-      nearby.find(target => target.kind === 'archive' || target.kind === 'chest' || target.kind === 'kiln' || target.kind === 'jar') ??
-      nearby[0];
+    const facilities = nearby.filter(target =>
+      target.kind === 'archive' || target.kind === 'chest' || target.kind === 'kiln' || target.kind === 'jar');
+    const [x, y] = game.position;
+    return facilities.find(target => target.tile?.[0] === x + facing[0] && target.tile[1] === y + facing[1]) ??
+      nearby.find(target => tool && targetAction(game, target).tool === tool) ?? facilities[0] ?? nearby[0];
   }
 
   function clearPlot(target: Target) {
@@ -581,7 +579,7 @@ export async function createControls(scene: Scene) {
       event.preventDefault();
       route = [];
       pendingTarget = null;
-      selected = null;
+      selected = hovered = null;
       keys.add(key);
     }
   });
@@ -598,7 +596,7 @@ export async function createControls(scene: Scene) {
       control.setPointerCapture(event.pointerId);
       route = [];
       pendingTarget = null;
-      selected = null;
+      selected = hovered = null;
       keys.add(direction);
     });
     for (const name of ['pointerup', 'pointercancel', 'lostpointercapture']) {
