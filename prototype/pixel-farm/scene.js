@@ -43,6 +43,7 @@ window.startLiuwanScene = function ({layout, jobMeter, assetUrl = file => file, 
     cottage: D.cottage,
     crate: {...D.crate, contact: 28},
     seedBox: {...D.crate, contact: 28},
+    kiln: {file: 'assets/kiln/salt-stove-scene-48x48.png', anchor: [24, 44], contact: 25},
     jar: {...D.jar, contact: 16},
     willow: {file: 'assets/willow/willow-imported.png', anchor: [48, 122], contact: 13},
     salt: {file: 'assets/rock/rock-ore-salt.png', anchor: [24, 44], contact: 28},
@@ -127,15 +128,7 @@ window.startLiuwanScene = function ({layout, jobMeter, assetUrl = file => file, 
       scene.fillStyle = color;
       scene.fillRect(left, top, width, height);
     };
-    if (kind === 'kiln') {
-      rect('#665949', -16, -20, 33, 20);
-      rect('#aa8b6d', -15, -19, 29, 4);
-      rect('#8b6f54', -16, -6, 33, 4);
-      rect('#3d4139', -15, -24, 31, 6);
-      rect('#798078', -12, -26, 25, 4);
-      rect('#d1b898', -6, -15, 13, 11);
-      rect('#50382a', -4, -13, 9, 9);
-    } else if (kind === 'clay') {
+    if (kind === 'clay') {
       const exposed = !game.depleted[actor.id];
       rect(exposed ? '#978676' : '#a6957f', -12, -4, 24, 8);
       rect(exposed ? '#7d6d60' : '#94816b', -8, -2, 15, 4);
@@ -247,7 +240,7 @@ window.startLiuwanScene = function ({layout, jobMeter, assetUrl = file => file, 
     const {remaining, elapsed, duration} = jobMeter(job, game.minute);
     if (actor.kind === 'kiln' && !job.ready && !reducedMotion.matches) {
       scene.fillStyle = phase % 5 < 3 ? '#ffb567' : '#d98145';
-      scene.fillRect(x - 3, y - 8, 7, 3);
+      scene.fillRect(x - 7, y - 8, 7, 3);
       for (let i = 0; i < 3; i++) {
         const rise = (phase + i * 6) % 18;
         scene.globalAlpha = (1 - rise / 18) * .7;
@@ -372,12 +365,9 @@ window.startLiuwanScene = function ({layout, jobMeter, assetUrl = file => file, 
       scene.strokeStyle = placement.allowed ? '#eef8ba' : '#f6bab6';
       scene.strokeRect(px + .5, py + .5, TILE - 1, TILE - 1);
       const ghost = at(placement.kind, placement.tile[0] + .5, placement.tile[1] + .6);
+      const {anchor} = sprites[ghost.kind];
       scene.globalAlpha = .6;
-      if (placement.kind === 'jar') {
-        scene.drawImage(images.jar, ghost.x - D.jar.anchor[0], ghost.y - D.jar.anchor[1]);
-      } else {
-        pixelProp(ghost, game);
-      }
+      scene.drawImage(images[ghost.kind], ghost.x - anchor[0], ghost.y - anchor[1]);
       scene.globalAlpha = 1;
     }
   }
@@ -529,9 +519,10 @@ window.startLiuwanScene = function ({layout, jobMeter, assetUrl = file => file, 
       const image = images[actor.kind];
       if (sprite) {
         const rock = actor.kind === 'salt' || actor.kind === 'stone';
-        const inset = rock ? 7 : actor.kind === 'jar' ? 9 : 4;
+        const inset = rock ? 7 : actor.kind === 'jar' ? 9 : actor.kind === 'kiln' ? 8 : 4;
+        const topInset = rock ? 23 : actor.kind === 'willow' ? 45 : actor.kind === 'kiln' ? 14 : 6;
         const left = actor.x - sprite.anchor[0] + inset;
-        const top = actor.y - sprite.anchor[1] + (rock ? 23 : actor.kind === 'willow' ? 45 : 6);
+        const top = actor.y - sprite.anchor[1] + topInset;
         if (x >= left && x < left + (sprite.frameSize ?? image.width) - inset * 2 && y >= top && y <= actor.y) return target;
       } else if (actor.kind === 'clay') {
         if (Math.abs(x - actor.x) <= 15 && Math.abs(y - actor.y) <= 10) return target;
