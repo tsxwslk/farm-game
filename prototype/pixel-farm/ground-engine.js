@@ -23,8 +23,10 @@
     }
     return result;
   }
-  function createWorld({untouchedFields = false} = {}) {
-    const cols = untouchedFields ? 48 : 34, rows = untouchedFields ? 30 : 20;
+  function createWorld({untouchedFields = false, southPass} = {}) {
+    const cols = untouchedFields ? 48 : 34;
+    const liuwanRows = untouchedFields ? 30 : 20;
+    const rows = southPass ? southPass.bounds.y + southPass.bounds.height : liuwanRows;
     const cells = Array(cols * rows).fill('grass');
     function rect(x, y, width, height, kind) {
       for (let row = y; row < y + height; row++) {
@@ -100,6 +102,17 @@
       rect(shore, y, cols - shore, 1, 'water');
     }
 
+    if (southPass) {
+      const {bounds, returnGate, waystone} = southPass;
+      rect(0, liuwanRows, cols, 1, 'bare');
+      rect(returnGate[0], returnGate[1], 1, 5, 'path');
+      rect(returnGate[0], returnGate[1] + 4, 4, 1, 'path');
+      rect(waystone[0], returnGate[1] + 4, 1, waystone[1] - returnGate[1] - 3, 'path');
+      rect(waystone[0] - 2, waystone[1], 5, 2, 'bare');
+      rect(bounds.x + 1, bounds.y + 2, 2, 5, 'bare');
+      rect(bounds.x + bounds.width - 4, bounds.y + 6, 3, 4, 'bare');
+    }
+
     // Sample the four cells around each tile junction. The visual tiles are
     // offset by half a tile so transitions follow the terrain grid boundaries.
     function cellAt(x, y) {
@@ -132,7 +145,7 @@
     const plotIds = Array(cells.length).fill(-1);
     if (untouchedFields) {
       for (const [index, terrain] of cells.entries()) {
-        if (terrain !== 'grass') continue;
+        if (terrain !== 'grass' || index >= liuwanRows * cols) continue;
         const col = index % cols, row = Math.floor(index / cols);
         plotIds[index] = plots.length;
         plots.push({id: plots.length, col, row, x: col * TILE, y: row * TILE, size: TILE, wet: (col + row) % 3 === 0});

@@ -6,13 +6,15 @@ import '../prototype/pixel-farm/ground-painter.js';
 import '../prototype/pixel-farm/depth-assets.js';
 import '../prototype/pixel-farm/game.js';
 import '../prototype/pixel-farm/scene.js';
-import { RESOURCES, SALT_RUIN } from './content';
+import { CROPS, RESOURCES, SALT_RUIN, SOUTH_PASS } from './content';
 import { createControls } from './controls';
 import { assetUrl } from './assets';
-import { jobMeter } from './game';
+import { cropStage, jobMeter } from './game';
 
 window.startLiuwanScene({
-  layout: { resources: RESOURCES, saltRuin: SALT_RUIN },
+  layout: { resources: RESOURCES, saltRuin: SALT_RUIN, southPass: SOUTH_PASS },
+  cropStage,
+  cropArt: CROPS,
   assetUrl,
   jobMeter,
   createControls,

@@ -1,7 +1,6 @@
-import { assetUrl } from './assets';
-import { BAG_SLOTS, HOTBAR_COLUMNS, ITEMS, RECIPES, STATIONS, STATION_ITEMS, TOOLS, type EntryId, type Point, type Station } from './content';
+import { BAG_SLOTS, HOTBAR_COLUMNS, ITEMS, RECIPES, SOUTH_PASS, STATIONS, STATION_ITEMS, TOOLS, type EntryId, type Point, type Station } from './content';
 import {
-  advance, canBuild, catchFish, formatClock, growthStatus, jobMeter, newGame, nextDay, operate, packStation, place,
+  advance, canBuild, canTravel, catchFish, formatClock, growthStatus, jobMeter, newGame, nextDay, operate, packStation, place,
   renewResources, targetAction, targetKey, targetProgress,
   type Game,
 } from './game';
@@ -121,7 +120,8 @@ export async function createControls(scene: Scene) {
 
   function activeTarget() {
     const tool = equippedTool(game);
-    const matchesTool = (target: Target) => target.kind === 'fishing' ? tool === 'rod' : target.kind !== 'water' || tool !== 'rod';
+    const matchesTool = (target: Target) => target.kind === 'fishing' ? tool === 'rod' :
+      (target.kind !== 'water' || tool !== 'rod') && (target.kind !== 'trail' || game.submitted);
     if (selected && isNear(selected) && matchesTool(selected)) return selected;
     if (hovered && isNear(hovered) && matchesTool(hovered)) return hovered;
     if (tool === 'rod') {
@@ -129,10 +129,11 @@ export async function createControls(scene: Scene) {
       const spot = spots.find(candidate => isRipple(candidate.tile)) ?? spots[0];
       if (spot) return spot;
     }
-    const nearby = targets.filter(target => isNear(target) &&
+    const nearby = targets.filter(target => isNear(target) && matchesTool(target) &&
       (target.kind !== 'resource' || !game.depleted[targetKey(target)]));
     const facilities = nearby.filter(target =>
-      target.kind === 'archive' || target.kind === 'chest' || target.kind === 'kiln' || target.kind === 'jar');
+      target.kind === 'archive' || target.kind === 'chest' || target.kind === 'kiln' || target.kind === 'jar' ||
+      target.kind === 'trail' || target.kind === 'return' || target.kind === 'waystone');
     const [x, y] = game.position;
     const ahead: Point = [x + facing[0], y + facing[1]];
     const farmTargets = [game.position, ahead].flatMap(([col, row]) => {
@@ -287,6 +288,28 @@ export async function createControls(scene: Scene) {
       report('旧制盐台旁留着一句话：「敲下灰白纹的石头，入灶煮成粗盐。」白纹岩石就在东边。');
       return;
     }
+    if (target.kind === 'waystone') {
+      report('路碑残字「柳湾在北。雨后石滑，循石基而行。」');
+      return;
+    }
+    if (target.kind === 'trail' || target.kind === 'return') {
+      if (!canTravel(game)) {
+        if (game.submitted) report('先在田记所交付南山道行粮。');
+        return;
+      }
+      const candidates = target.kind === 'trail' ? [SOUTH_PASS.returnGate] :
+        targets.find(candidate => candidate.kind === 'trail')?.points ?? [];
+      const landing = candidates.find(point => passable(world, blocked, ...point));
+      if (!landing) {
+        report('山道路口被挡住了。');
+        return;
+      }
+      game.position = [...landing];
+      selected = hovered = null;
+      report(target.kind === 'trail' ? '到了南山道。循小径可见路碑。' : '回到了柳湾。');
+      void saves.save();
+      return;
+    }
     const firstWater = target.kind === 'plot' && game.plots.every(plot => plot.watered === null) &&
       !game.entries.radish && !game.entries.rockSalt;
     const result = operate(game, target, clearPlot);
@@ -429,6 +452,7 @@ export async function createControls(scene: Scene) {
     hotbarCard.update();
     showButton(actionButton, placement ? '取消' : fishing?.reel ? '收线' : fishing ? '收竿' : '操作', placement ? 'Esc' : 'F');
     showText(node('game-coins'), game.coins + ' 文');
+    showText(node('game-region'), game.position[1] >= SOUTH_PASS.bounds.y ? SOUTH_PASS.name : '柳湾');
     const minute = Math.floor(game.minute);
     if (minute !== renderedMinute) {
       renderedMinute = minute;
@@ -536,7 +560,8 @@ export async function createControls(scene: Scene) {
 
   function renderPanel() {
     if (!panel) return;
-    const titles = { bag: '背包', warehouse: '仓库', ledger: '物志', map: '柳湾地图', saves: '存档', archive: '田记所账面', ...STATIONS };
+    const mapTitle = game.position[1] >= SOUTH_PASS.bounds.y ? SOUTH_PASS.name + '地图' : '柳湾地图';
+    const titles = { bag: '背包', warehouse: '仓库', ledger: '物志', map: mapTitle, saves: '存档', archive: '田记所账面', ...STATIONS };
     node('sheet-title').textContent = titles[panel];
     const update = (text: string) => {
       renderPanel();
@@ -549,7 +574,7 @@ export async function createControls(scene: Scene) {
         void saves.save();
       });
     } else if (panel === 'ledger') {
-      body.replaceChildren(ledgerPanel(game, selectedEntry, id => { selectedEntry = id; renderPanel(); }, assetUrl));
+      body.replaceChildren(ledgerPanel(game, selectedEntry, id => { selectedEntry = id; renderPanel(); }));
     } else if (panel === 'map') {
       body.replaceChildren(...mapPanel(world, game, ripples));
     } else if (panel === 'bag' || panel === 'warehouse') {

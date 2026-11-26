@@ -1,6 +1,6 @@
 import * as z from 'zod';
-import { BAG_SLOTS, ENTRIES, HOTBAR_COLUMNS, ITEMS, RECIPES, RESOURCES, STARTING_TOOLS, STATIONS, TILL_HITS, TOOLS, TRADE, WAREHOUSE_SLOTS, WATER_CAPACITY, type Tool } from './content';
-import { DAY, SAVE_VERSION, type Game } from './game';
+import { BAG_SLOTS, CROP_IDS, ENTRIES, HOTBAR_COLUMNS, ITEMS, LIUWAN_ROWS, RECIPES, RESOURCES, SOUTH_PASS, STARTING_TOOLS, STATIONS, TILL_HITS, TOOLS, TRADE, WAREHOUSE_SLOTS, WATER_CAPACITY, type Tool } from './content';
+import { canTravel, DAY, SAVE_VERSION, type Game } from './game';
 import { equippedTool, startingInventory } from './inventory';
 import type { Plot, World } from './scene';
 
@@ -13,6 +13,7 @@ const item = z.enum(Object.keys(ITEMS) as (keyof typeof ITEMS)[]);
 const entryId = z.enum(Object.keys(ENTRIES) as (keyof typeof ENTRIES)[]);
 const station = z.enum(Object.keys(STATIONS) as (keyof typeof STATIONS)[]);
 const recipe = z.enum(Object.keys(RECIPES) as (keyof typeof RECIPES)[]);
+const oldPlot = z.strictObject({ tilled: z.boolean(), planted: deadline, watered: deadline });
 
 const batches = z.array(z.strictObject({ quantity: whole.min(1), deadline })).min(1);
 const stack = z.discriminatedUnion('kind', [
@@ -23,7 +24,7 @@ const stack = z.discriminatedUnion('kind', [
 const gameFields = {
   day: whole.min(1), minute, review: z.boolean(), position: point,
   water: whole.max(WATER_CAPACITY), coins: whole,
-  plots: z.array(z.strictObject({ tilled: z.boolean(), planted: deadline, watered: deadline })),
+  plots: z.array(oldPlot),
   stations: z.partialRecord(station, point),
   entries: z.partialRecord(entryId, z.strictObject({ lit: z.boolean(), deadline })),
   jobs: z.partialRecord(station, z.strictObject({
@@ -36,11 +37,16 @@ const gameFields = {
   log: z.array(z.string().max(250)).max(50),
   account: z.strictObject({ income: whole, expenses: whole, royalties: whole }),
 };
-const gameSchema = z.strictObject({
-  ...gameFields, schemaVersion: z.literal(SAVE_VERSION),
+const previousGame = z.strictObject({
+  ...gameFields,
   hotbarRow: whole.max(BAG_SLOTS / HOTBAR_COLUMNS - 1),
   equippedSlot: whole.max(BAG_SLOTS - 1).nullable(),
   bag: z.array(stack).length(BAG_SLOTS), warehouse: z.array(stack).length(WAREHOUSE_SLOTS),
+});
+const gameSchema = previousGame.extend({
+  schemaVersion: z.literal(SAVE_VERSION),
+  plots: z.array(oldPlot.extend({ crop: z.enum(CROP_IDS).nullable() })),
+  commissions: z.strictObject({ radishStockDay: whole, trailFood: z.boolean() }),
 });
 
 const saveSchema = z.strictObject({
@@ -82,7 +88,7 @@ const migrations: Partial<Record<number, (save: unknown, world: World) => unknow
     };
   },
   2(value, world) {
-    const parsed = saveSchema.extend({ game: gameSchema.extend({ schemaVersion: z.literal(2) }) }).safeParse(value);
+    const parsed = saveSchema.extend({ game: previousGame.extend({ schemaVersion: z.literal(2) }) }).safeParse(value);
     if (!parsed.success || parsed.data.game.plots.length !== 12) throw new Error('旧存档格式有误。');
     const { game } = parsed.data;
     return {
@@ -95,7 +101,7 @@ const migrations: Partial<Record<number, (save: unknown, world: World) => unknow
     };
   },
   3(value) {
-    const parsed = saveSchema.extend({ game: gameSchema.extend({ schemaVersion: z.literal(3) }) }).safeParse(value);
+    const parsed = saveSchema.extend({ game: previousGame.extend({ schemaVersion: z.literal(3) }) }).safeParse(value);
     if (!parsed.success) throw new Error('旧存档格式有误。');
     const { game } = parsed.data;
     const resourceIds: Record<string, string> = { 'north-willow': 'north-oak', 'east-willow': 'east-oak' };
@@ -113,10 +119,10 @@ const migrations: Partial<Record<number, (save: unknown, world: World) => unknow
     };
   },
   4(value, world) {
-    const parsed = saveSchema.extend({ game: gameSchema.extend({ schemaVersion: z.literal(4) }) }).safeParse(value);
+    const parsed = saveSchema.extend({ game: previousGame.extend({ schemaVersion: z.literal(4) }) }).safeParse(value);
     if (!parsed.success || parsed.data.game.plots.length !== world.legacyPlots.length) throw new Error('旧存档格式有误。');
     const { game } = parsed.data;
-    const plots: Plot[] = world.plots.map(() => ({ tilled: false, planted: null, watered: null }));
+    const plots: Omit<Plot, 'crop'>[] = world.plots.map(() => ({ tilled: false, planted: null, watered: null }));
     const migratedKeys = new Map<string, string>();
     for (const old of world.legacyPlots) {
       const x = old.x / 32, y = old.y / 32;
@@ -142,7 +148,7 @@ const migrations: Partial<Record<number, (save: unknown, world: World) => unknow
     };
   },
   5(value) {
-    const parsed = saveSchema.extend({ game: gameSchema.extend({ schemaVersion: z.literal(5) }) }).safeParse(value);
+    const parsed = saveSchema.extend({ game: previousGame.extend({ schemaVersion: z.literal(5) }) }).safeParse(value);
     if (!parsed.success) throw new Error('旧存档格式有误。');
     const { game } = parsed.data;
     for (const stack of [...game.bag, ...game.warehouse]) {
@@ -151,6 +157,16 @@ const migrations: Partial<Record<number, (save: unknown, world: World) => unknow
       for (const batch of stack.batches) batch.quantity *= 3;
     }
     return { ...parsed.data, game: { ...game, schemaVersion: 6 } };
+  },
+  6(value) {
+    const parsed = saveSchema.extend({ game: previousGame.extend({ schemaVersion: z.literal(6) }) }).safeParse(value);
+    if (!parsed.success) throw new Error('旧存档格式有误。');
+    const { game } = parsed.data;
+    return { ...parsed.data, game: {
+      ...game, schemaVersion: 7,
+      plots: game.plots.map(plot => ({ ...plot, crop: plot.planted === null ? null : 'radish' })),
+      commissions: { radishStockDay: 0, trailFood: false },
+    } };
   },
 };
 
@@ -167,8 +183,10 @@ export function validateSave(value: unknown, world: World): Save {
   if (!parsed.success) throw new Error('存档格式有误。');
 
   const { game } = parsed.data;
+  const { bounds } = SOUTH_PASS;
   const inBounds = ([x, y]: Game['position']) =>
-    x < world.cols && y < world.rows && world.cells[y * world.cols + x] !== 'water';
+    x < world.cols && y < world.rows && world.cells[y * world.cols + x] !== 'water' &&
+    (y < LIUWAN_ROWS || canTravel(game) && y >= bounds.y && x >= bounds.x && x < bounds.x + bounds.width);
   const hitsFor = (key: string, tool?: Tool) => {
     if (Object.hasOwn(RESOURCES, key)) {
       const resource = RESOURCES[key];
@@ -185,13 +203,18 @@ export function validateSave(value: unknown, world: World): Save {
   const positions = [game.position, ...Object.values(game.stations)];
   if (game.plots.length !== world.plots.length || game.minute < end - DAY ||
       (game.review ? game.minute !== end : game.minute >= end) || !positions.every(inBounds) ||
+      Object.values(game.stations).some(([, y]) => y >= LIUWAN_ROWS) ||
+      game.commissions.radishStockDay > game.day ||
+      (!game.submitted && (game.commissions.radishStockDay > 0 || game.commissions.trailFood)) ||
+      (game.commissions.trailFood && !game.entries.pakChoi?.lit) ||
       new Set(positions.map(value => value.join(','))).size !== positions.length ||
       (game.equippedSlot !== null && (!game.bag[game.equippedSlot] || Math.floor(game.equippedSlot / HOTBAR_COLUMNS) !== game.hotbarRow)) ||
       toolIds.length !== STARTING_TOOLS.length || new Set(toolIds).size !== STARTING_TOOLS.length ||
       Object.entries(game.depleted).some(([id, day]) => !Object.hasOwn(RESOURCES, id) || day > game.day) ||
       Object.entries(game.strikes).some(([key, hits]) => hits >= hitsFor(key) || game.depleted[key]) ||
       (game.action && (!hitsFor(game.action.key, game.action.tool) || game.action.at <= game.minute || game.action.tool !== equippedTool(game))) ||
-      game.plots.some(plot => (plot.planted !== null && (!plot.tilled || plot.planted > game.minute)) ||
+      game.plots.some(plot => (plot.crop === null) !== (plot.planted === null) ||
+        (plot.planted !== null && (!plot.tilled || plot.planted > game.minute)) ||
         (plot.watered !== null && (plot.planted === null || plot.watered < plot.planted || plot.watered > game.minute))) ||
       Object.entries(game.jobs).some(([id, job]) =>
         !game.stations[id as keyof Game['stations']] || RECIPES[job.recipe].station !== id ||

@@ -29,6 +29,7 @@ python -m http.server 8766 --bind 127.0.0.1
 - 盐灶使用 `assets/kiln/salt-stove-scene-48x48.png`，接地点为 `(24, 44)`。同目录包含 16×16 背包图标、分层源文件和 Lua 绘制脚本。
 - 田记所旧址使用 `assets/house/house-cottage-128x104.png`，脚点为 `(64, 96)`，投影根据房屋轮廓生成。
 - 院内和恢复后的腌菜缸使用 `assets/jar/jar-crock-48x48.png`，脚点为 `(24, 44)`，投影根据缸身轮廓生成。
+- 正式版小白菜使用 `assets/pak-choi/` 下的四张 48×72 田间图，脚点统一为 `(24, 66)`，另有 32×32 背包收获图 `05-inventory.png`。素材由 `draw-pak-choi.lua` 经 Aseprite 批处理生成。
 
 ## 源文件与生成
 

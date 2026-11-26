@@ -1,9 +1,9 @@
 import {
-  ENTRIES, HOTBAR_COLUMNS, INVENTORY_INFO, ITEMS, KILN_COST, RECIPES, RESOURCES, SEEDS_PER_RADISH, STATIONS, TRADE, WATER_CAPACITY,
-  type EntryId, type Point, type RecipeId, type Station,
+  COMMISSIONS, CROPS, CROP_IDS, ENTRIES, HOTBAR_COLUMNS, INVENTORY_INFO, ITEMS, KILN_COST, LIUWAN_ROWS, RECIPES, RESOURCES, SOUTH_PASS, STATIONS, TRADE, WATER_CAPACITY,
+  type CommissionId, type EntryId, type Point, type Recipe, type RecipeId, type Station,
 } from './content';
 import {
-  canBuild, canSubmit, claimJob, claimSeed, costs, hasMaterials, jobMeter, needsSeed,
+  canBuild, canSubmit, canTravel, claimJob, claimPakChoiSeeds, claimSeed, commissionStatus, costs, deliverCommission, hasMaterials, jobMeter, needsSeed,
   saveSeed, startJob, submit, trade, tradeLimit, warnSale, type Game, type TradeItem,
 } from './game';
 import type { World } from './scene';
@@ -178,9 +178,10 @@ export function inventoryPanel(game: Game, showWarehouse: boolean, source: SlotA
     highlighted = grids.querySelector('[data-storage="' + address.storage + '"][data-index="' + address.index + '"]');
     highlighted?.setAttribute('aria-pressed', 'true');
     renderItemCard(card, game, item);
-    if (address.storage === 'bag' && item.id === 'radish') {
+    const crop = CROP_IDS.find(id => id === item.id);
+    if (address.storage === 'bag' && crop) {
       const actions = element('div', undefined, 'sheet-actions');
-      actions.append(button('留种 ×' + SEEDS_PER_RADISH, () => update(saveSeed(game, address.index))));
+      actions.append(button('留种 ×' + CROPS[crop].seedYield, () => update(saveSeed(game, address.index))));
       card.append(actions);
     }
     positionCard();
@@ -267,8 +268,9 @@ export function stationPanel(game: Game, station: Station, update: (message: str
     return [remaining, meter];
   }
   for (const id of Object.keys(RECIPES) as RecipeId[]) {
-    const recipe = RECIPES[id];
-    if (recipe.station !== station || (id === 'fishSoup' && !game.entries.crucian)) continue;
+    const recipe: Recipe = RECIPES[id];
+    if (recipe.station !== station || (id === 'fishSoup' && !game.entries.crucian) ||
+      (recipe.requiresArchive && !game.submitted)) continue;
     list.append(listRow(recipe.label + ' · ' + costs(recipe.inputs) + ' → ' + ITEMS[recipe.output] + ' ×' + recipe.outputQuantity,
       button('开工', () => update(startJob(game, id)), !hasMaterials(game, recipe.inputs), true)));
   }
@@ -279,11 +281,14 @@ export function stationPanel(game: Game, station: Station, update: (message: str
 
 export class TradingBook {
   private side: 'sell' | 'buy' = 'sell';
+  private showCommissions = false;
   private item: TradeItem = 'radish';
   refresh = () => {};
   focus = () => {};
 
   render(parent: HTMLElement, game: Game, report: (message: string) => void) {
+    if (!game.submitted && (this.item === 'pakChoi' || this.item === 'pakChoiPickle')) this.item = 'radish';
+    if (!game.submitted) this.showCommissions = false;
     const redraw = () => {
       this.render(parent, game, report);
       this.focus();
@@ -291,10 +296,55 @@ export class TradingBook {
     const tabs = element('div', undefined, 'sheet-tabs');
     for (const side of ['sell', 'buy'] as const) {
       tabs.append(setPressed(button(side === 'sell' ? '出售' : '买入', () => {
+        this.showCommissions = false;
         this.side = side;
         this.item = side === 'sell' ? 'radish' : 'seeds';
         redraw();
-      }), side === this.side));
+      }), side === this.side && !this.showCommissions));
+    }
+    const boardTab = setPressed(button('委托簿', () => {
+      this.showCommissions = true;
+      redraw();
+    }), this.showCommissions);
+    boardTab.hidden = !game.submitted;
+    tabs.append(boardTab);
+    if (this.showCommissions && game.submitted) {
+      this.focus = () => boardTab.focus({ preventScroll: true });
+      const clue = element('p', canTravel(game)
+        ? '南山道已开放。从南侧扩垦地西边沿小径向南，至入口按 F。'
+        : '旧档一行「南山道行粮，盐菜一瓮。」从委托簿领种，交付一份还在期限内的盐渍小白菜。', 'sheet-note');
+      const seed = button('领小白菜种子 ×2', () => {
+        report(claimPakChoiSeeds(game));
+        this.refresh();
+      });
+      const list = element('ul', undefined, 'sheet-list');
+      const rows = (Object.keys(COMMISSIONS) as CommissionId[]).map(id => {
+        const { name, item, quantity, reward } = COMMISSIONS[id];
+        const details = element('div');
+        const status = element('small', undefined, 'sheet-note');
+        details.append(element('strong', name), element('p', ITEMS[item] + ' ×' + quantity + ' · ' + reward + ' 文'), status);
+        const deliver = button('交付' + name, () => {
+          report(deliverCommission(game, id));
+          if (canTravel(game)) clue.textContent = '南山道已开放。从南侧扩垦地西边沿小径向南，至入口按 F。';
+          this.refresh();
+        });
+        const row = element('li', undefined, 'sheet-row');
+        row.append(details, deliver);
+        list.append(row);
+        return { id, status, deliver };
+      });
+      this.refresh = () => {
+        seed.hidden = !needsSeed(game, 'pakChoi');
+        for (const { id, status, deliver } of rows) {
+          const reason = commissionStatus(game, id);
+          const caption = reason || '可交付';
+          if (status.textContent !== caption) status.textContent = caption;
+          deliver.disabled = Boolean(reason);
+        }
+      };
+      parent.replaceChildren(tabs, clue, seed, list);
+      this.refresh();
+      return;
     }
     const balance = element('p', undefined, 'trade-summary');
     const list = element('ul', undefined, 'sheet-list');
@@ -302,6 +352,7 @@ export class TradingBook {
     const headings = element('div', undefined, 'trade-grid trade-grid-header');
     headings.append(element('span', '物品'), element('span', '单价'), element('span', this.side === 'sell' ? '可出售' : '今日库存'));
     for (const [id, price] of Object.entries(TRADE[this.side]) as [TradeItem, number][]) {
+      if (!game.submitted && (id === 'pakChoi' || id === 'pakChoiPickle')) continue;
       const row = element('li', undefined, 'trade-grid');
       const available = element('span');
       stock.push([id, available]);
@@ -367,6 +418,7 @@ export class TradingBook {
       seed.hidden = !needsSeed(game);
       updateText(archive, game.submitted ? '第一卷已归档' : '归档柳湾第一卷');
       archive.disabled = game.submitted || !canSubmit(game);
+      boardTab.hidden = !game.submitted;
     };
     this.focus = () => {
       quantity.focus({ preventScroll: true });
@@ -399,8 +451,7 @@ export class TradingBook {
   }
 }
 
-export function ledgerPanel(game: Game, selected: EntryId, select: (id: EntryId) => void,
-  assetUrl: (file: string) => string) {
+export function ledgerPanel(game: Game, selected: EntryId, select: (id: EntryId) => void) {
   const spread = element('div', undefined, 'ledger-spread');
   const index = element('nav', undefined, 'ledger-index');
   index.setAttribute('aria-label', '物志分册');
@@ -416,11 +467,10 @@ export function ledgerPanel(game: Game, selected: EntryId, select: (id: EntryId)
   const rule = ENTRIES[selected];
   const page = element('article', undefined, 'ledger-page');
   page.append(element('p', rule.section, 'sheet-note'), element('h3', ITEMS[selected]));
-  if (entry && selected === 'radish') {
-    const image = element('img');
-    image.src = assetUrl('assets/cherry-radish/05-inventory.png');
-    image.alt = '樱桃萝卜';
-    page.append(image);
+  if (entry) {
+    const illustration = element('div', undefined, 'ledger-illustration');
+    illustration.append(stackIcon({ kind: 'item', id: selected, batches: [] }));
+    page.append(illustration);
   }
   page.append(element('p', entry?.lit ? '已上锚' : entry ? '已发现' : '未发现', 'sheet-note'));
   page.append(element('p', entry ? rule.use : rule.clue));
@@ -438,14 +488,18 @@ export function ledgerPanel(game: Game, selected: EntryId, select: (id: EntryId)
 export function mapPanel(world: World, game: Game, ripples: Point[]) {
   const map = element('div', undefined, 'regional-map');
   const canvas = element('canvas');
-  canvas.width = world.cols * 8;
-  canvas.height = world.rows * 8;
+  const inPass = game.position[1] >= SOUTH_PASS.bounds.y;
+  const bounds = inPass ? SOUTH_PASS.bounds : { x: 0, y: 0, width: world.cols, height: LIUWAN_ROWS };
+  canvas.width = bounds.width * 8;
+  canvas.height = bounds.height * 8;
   const ctx = canvas.getContext('2d')!;
   const colors: Record<string, string> = { grass: '#85985c', bare: '#c9a777', path: '#d0af7c', water: '#639c9c' };
-  world.cells.forEach((terrain, index) => {
-    ctx.fillStyle = colors[terrain];
-    ctx.fillRect(index % world.cols * 8, Math.floor(index / world.cols) * 8, 8, 8);
-  });
+  for (let y = 0; y < bounds.height; y++) {
+    for (let x = 0; x < bounds.width; x++) {
+      ctx.fillStyle = colors[world.cells[(y + bounds.y) * world.cols + x + bounds.x]];
+      ctx.fillRect(x * 8, y * 8, 8, 8);
+    }
+  }
   map.append(canvas);
   const caption = element('p', '点击标注查看地点。', 'sheet-note');
   function marker(name: string, x: number, y: number, mark: string, className?: string) {
@@ -453,16 +507,22 @@ export function mapPanel(world: World, game: Game, ripples: Point[]) {
     if (className) pin.className = className;
     pin.setAttribute('aria-label', name);
     pin.title = name;
-    pin.style.left = (x + .5) / world.cols * 100 + '%';
-    pin.style.top = (y + .5) / world.rows * 100 + '%';
+    pin.style.left = (x - bounds.x + .5) / bounds.width * 100 + '%';
+    pin.style.top = (y - bounds.y + .5) / bounds.height * 100 + '%';
     map.append(pin);
   }
-  marker('田记所', 6, 5, '所');
-  for (const { label, tile, mark } of world.landmarks) marker(label, ...tile, mark);
-  for (const tile of ripples) marker('涟漪钓点', ...tile, '钓');
-  if (game.entries.rockSalt) marker('岩盐发现处', ...RESOURCES['buried-salt'].tile, '盐');
-  for (const [station, position] of Object.entries(game.stations) as [Station, [number, number]][]) {
-    marker(STATIONS[station], ...position, station === 'kiln' ? '灶' : '缸');
+  if (inPass) {
+    marker('返回柳湾', ...SOUTH_PASS.returnGate, '返');
+    marker('山道路碑', ...SOUTH_PASS.waystone, '碑');
+  } else {
+    marker('田记所', 6, 5, '所');
+    for (const { label, tile, mark } of world.landmarks) marker(label, ...tile, mark);
+    for (const tile of ripples) marker('涟漪钓点', ...tile, '钓');
+    if (game.entries.rockSalt) marker('岩盐发现处', ...RESOURCES['buried-salt'].tile, '盐');
+    if (game.submitted) marker(canTravel(game) ? '南山道入口' : '南山道 · 备齐行粮后开放', ...SOUTH_PASS.gate, '道');
+    for (const [station, position] of Object.entries(game.stations) as [Station, [number, number]][]) {
+      marker(STATIONS[station], ...position, station === 'kiln' ? '灶' : '缸');
+    }
   }
   marker('当前位置', ...game.position, '●', 'map-player');
   return [map, caption];

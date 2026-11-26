@@ -1,10 +1,11 @@
-import type { Point, Station, Tool } from './content';
+import type { CropId, Point, Station, Tool, SOUTH_PASS } from './content';
 import type { Game } from './game';
 
 export interface Plot {
   tilled: boolean;
   planted: number | null;
   watered: number | null;
+  crop: CropId | null;
 }
 
 export interface World {
@@ -18,7 +19,7 @@ export interface World {
 }
 
 export interface Target {
-  kind: 'plot' | 'resource' | 'water' | 'chest' | 'archive' | 'ruin' | 'fishing' | Station;
+  kind: 'plot' | 'resource' | 'water' | 'chest' | 'archive' | 'ruin' | 'fishing' | 'trail' | 'return' | 'waystone' | Station;
   id?: string | number;
   label?: string;
   tile?: Point;
@@ -63,7 +64,7 @@ export interface Scene {
   canPlace(game: Game, kind: Station, tile: Point): boolean;
 }
 
-type CropStage = 'ground' | 'tilled' | 'seed' | 'germinating' | 'sprout' | 'seedling' | 'bulking' | 'ripe';
+export type CropStage = 'ground' | 'tilled' | 'seed' | 'germinating' | 'sprout' | 'seedling' | 'bulking' | 'ripe';
 
 declare global {
   interface Window {
@@ -76,7 +77,9 @@ declare global {
       routeTo(world: World, blocked: Set<number>, from: Point, destinations: Point[]): Point[] | null;
     };
     startLiuwanScene(options: {
-      layout: { resources: object; saltRuin: Point };
+      layout: { resources: object; saltRuin: Point; southPass: typeof SOUTH_PASS };
+      cropStage: (game: Game, plot: Plot) => CropStage;
+      cropArt: Record<CropId, { art: string }>;
       jobMeter: (job: import('./game').Job, minute: number) => { remaining: number; elapsed: number; duration: number };
       assetUrl: (file: string) => string;
       createControls: (scene: Scene) => void;
