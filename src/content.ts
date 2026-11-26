@@ -86,7 +86,7 @@ export interface Recipe<Collected extends Item = EntryId> {
 export const RECIPES = {
   salt: {
     label: '制粗盐', station: 'kiln', inputs: { rockSalt: 1 }, output: 'salt', outputQuantity: 12,
-    duration: 45, timedInputs: ['rockSalt'], carryDeadline: 'rockSalt',
+    duration: 45, timedInputs: ['rockSalt'], carryDeadline: 'rockSalt', outputEntry: 'salt',
   },
   crock: {
     label: '烧制腌菜缸', station: 'kiln', inputs: { clay: 3, wood: 1 }, output: 'crock', outputQuantity: 1, duration: 90,
@@ -98,7 +98,7 @@ export const RECIPES = {
   },
   fishSoup: {
     label: '炖鲫鱼汤', station: 'kiln', inputs: { crucian: 1, salt: 1 }, output: 'fishSoup', outputQuantity: 1,
-    duration: 45, timedInputs: ['crucian'], anchors: [{ input: 'crucian', entry: 'crucian' }],
+    duration: 45, timedInputs: ['crucian'], anchors: [{ input: 'crucian', entry: 'crucian' }], outputEntry: 'fishSoup',
   },
   pakChoiPickle: {
     label: '腌小白菜', station: 'jar', inputs: { pakChoi: 1, salt: 3 }, output: 'pakChoiPickle', outputQuantity: 1,
@@ -132,6 +132,16 @@ export const ENTRIES = {
     section: '水族册', reward: 35, duration: 480,
     clue: '带钓竿去柳湾河岸抛竿。水面出现涟漪的地方更容易咬钩。',
     use: `把鲫鱼 ×${RECIPES.fishSoup.inputs.crucian} 和粗盐 ×${RECIPES.fishSoup.inputs.salt} 放进盐灶炖汤。`,
+  },
+  salt: {
+    section: '加工品册', reward: 0, duration: 0,
+    clue: `在盐灶用岩盐 ×${RECIPES.salt.inputs.rockSalt} 熬制粗盐。`,
+    use: '熬出的粗盐可用来腌菜和炖汤。',
+  },
+  fishSoup: {
+    section: '加工品册', reward: 0, duration: 0,
+    clue: `在盐灶用鲫鱼 ×${RECIPES.fishSoup.inputs.crucian} 和粗盐 ×${RECIPES.fishSoup.inputs.salt} 炖汤。`,
+    use: '制成的鲫鱼汤可卖给田记所。',
   },
   pickle: {
     section: '加工品册', reward: 30, duration: 0,

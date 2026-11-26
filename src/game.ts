@@ -88,6 +88,10 @@ function light(game: Game, id: EntryId) {
   if (entry.lit) return;
   entry.lit = true;
   const { reward } = ENTRIES[id];
+  if (!reward) {
+    record(game, ITEMS[id] + '已收录。');
+    return;
+  }
   game.coins += reward;
   game.account.royalties += reward;
   record(game, ITEMS[id] + '已上锚，稿酬 +' + reward + ' 文');

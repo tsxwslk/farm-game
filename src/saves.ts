@@ -1,7 +1,7 @@
 import * as z from 'zod';
 import { BAG_SLOTS, CROP_IDS, ENTRIES, HOTBAR_COLUMNS, ITEMS, LIUWAN_ROWS, RECIPES, RESOURCES, SOUTH_PASS, STARTING_TOOLS, STATIONS, TILL_HITS, TOOLS, TRADE, WAREHOUSE_SLOTS, WATER_CAPACITY, type Tool } from './content';
 import { canTravel, DAY, SAVE_VERSION, type Game } from './game';
-import { equippedTool, startingInventory } from './inventory';
+import { count, equippedTool, startingInventory } from './inventory';
 import type { Plot, World } from './scene';
 
 const whole = z.int().nonnegative();
@@ -221,6 +221,18 @@ export function validateSave(value: unknown, world: World): Save {
         job.started > game.minute || Math.abs(job.at - job.started - RECIPES[job.recipe].duration) > 1e-6 ||
         job.ready !== (job.at <= game.minute))) {
     throw new Error('存档内的时间、位置或物品状态有误。');
+  }
+
+  // Older saves can still show that a product was made, even if it was sold or used.
+  const jobs = Object.values(game.jobs);
+  const hasProduct = (id: 'salt' | 'fishSoup') => count(game, id) || count(game, id, 'warehouse') ||
+    jobs.some(job => job.ready && RECIPES[job.recipe].output === id);
+  if (hasProduct('fishSoup') || game.entries.crucian?.lit) {
+    game.entries.fishSoup ??= { lit: true, deadline: null };
+  }
+  if (hasProduct('salt') || game.entries.pickle?.lit || game.entries.pakChoiPickle?.lit ||
+      game.entries.fishSoup?.lit || jobs.some(job => 'salt' in RECIPES[job.recipe].inputs)) {
+    game.entries.salt ??= { lit: true, deadline: null };
   }
   return parsed.data;
 }
