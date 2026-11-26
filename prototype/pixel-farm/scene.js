@@ -50,12 +50,12 @@ window.startLiuwanScene = function ({layout, jobMeter, cropStage, cropArt, asset
     seedBox: {...D.crate, contact: 28},
     kiln: {file: 'assets/kiln/salt-stove-scene-48x48.png', anchor: [24, 44], contact: 25},
     jar: {...D.jar, contact: 16},
-    willow: {file: 'assets/willow/willow-repaint.png', anchor: [48, 122], contact: 13},
+    willow: {file: 'assets/willow/willow-repaint.png', anchor: [48, 122], contact: 16},
     salt: {file: 'assets/rock/rock-ore-salt.png', anchor: [24, 44], contact: 28},
     stone: {file: 'assets/rock/rock-atlas.png', anchor: [24, 44], frameSize: 48, frames: 3, contact: 26},
   };
   if (layout) {
-    sprites.oak = {file: 'assets/oak/oak-96x128.png', anchor: [48, 122], contact: 13};
+    sprites.oak = {file: 'assets/oak/oak-96x128.png', anchor: [48, 122], contact: 30};
     sprites.ruin = {file: 'assets/salt-ruins/salt-ruins-64x64.png', anchor: [32, 58], contact: 30};
     const stump = 'assets/stump/stump-48x48.png';
     if (assetUrl(stump)) {
@@ -196,14 +196,27 @@ window.startLiuwanScene = function ({layout, jobMeter, cropStage, cropArt, asset
     }
     const width = sprites[kind]?.contact;
     if (!width) return;
-    if (!sun && isTree(kind)) {
-      scene.fillStyle = '#3043322b';
-      scene.fillRect(x - 9, y - 2, 27, 4);
-      scene.fillRect(x - 4, y + 2, 27, 3);
-      scene.fillRect(x + 9, y + 5, 10, 1);
+    if (isTree(kind)) {
+      drawTreeContact(x, y, width, actor.scale ?? 1);
+      return;
     }
     scene.fillStyle = '#30433249';
     scene.fillRect(Math.round(x - width / 2), y - 2, width, 4);
+  }
+
+  function drawTreeContact(x, y, width, scale) {
+    const row = (top, bottom, span) => {
+      const dy = Math.round(top * scale);
+      scene.fillRect(x - Math.round(span * scale / 2), y + dy, Math.round(span * scale),
+        Math.round(bottom * scale) - dy);
+    };
+    scene.fillStyle = '#26372b38';
+    row(-5, -2, width + 4);
+    row(-2, 4, width + 12);
+    row(4, 7, width + 2);
+    scene.fillStyle = '#26372b57';
+    row(-3, 2, width + 2);
+    row(2, 4, width - 4);
   }
 
   function drawSunShadow(actor, sun) {
@@ -218,11 +231,13 @@ window.startLiuwanScene = function ({layout, jobMeter, cropStage, cropArt, asset
     const y = crop ? actor.y - BED_HEIGHT : actor.y - actor.level;
     const size = sprite.frameSize ?? mask.width;
     const column = sprite.frameSize ? E.hash(actor.x, actor.y) % sprite.frames : 0;
+    const tree = isTree(key);
+    const spread = tree ? .62 : .86;
+    const length = (tree ? .68 + Math.abs(sun.dx) * .18 : 1) * scale;
     scene.save();
-    scene.globalAlpha = sun.strength;
+    scene.globalAlpha = sun.strength * (tree ? .78 : 1);
     scene.translate(x, y);
-    const spread = isTree(key) ? .62 : .86;
-    scene.transform(spread * scale, 0, -sun.dx * scale, -sun.dy * scale, 0, 0);
+    scene.transform(spread * scale, 0, -sun.dx * length, -sun.dy * length, 0, 0);
     scene.drawImage(mask, column * size, 0, size, mask.height, -ax, -ay, size, mask.height);
     scene.restore();
   }
