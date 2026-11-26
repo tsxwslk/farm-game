@@ -26,6 +26,8 @@ const pixels: Partial<Record<Item, Pixel[]>> = {
   rockSalt: [[shadow, 2, 8, 12, 5], ['#81786f', 3, 7, 10, 5], ['#e0c3b8', 5, 6, 3, 4],
     ['#fff0dd', 6, 5, 2, 3], ['#f5dbc7', 9, 8, 3, 2]],
   salt: [[shadow, 2, 9, 12, 4], ['#a99c83', 3, 8, 10, 4], ['#e8dcca', 4, 7, 8, 3], ['#fbefdb', 6, 5, 4, 3]],
+  mustardTrace: [['#3a625e', 4, 7, 8, 5], ['#6ea695', 5, 6, 6, 5], ['#b8d6aa', 6, 5, 4, 5],
+    ['#e4e5b0', 7, 6, 2, 3], ['#a5c8a1', 3, 4, 2, 2], ['#c5d6a5', 11, 11, 2, 2]],
 };
 
 function imageIcon(file: string) {

@@ -22,6 +22,18 @@
 }
 .place-name span { color: var(--gold); font-size: 13px; }
 .place-name strong { font-size: 24px; letter-spacing: .12em; }
+#game-forecast {
+  min-height: 28px;
+  margin-top: 3px;
+  padding: 2px 6px;
+  border: 1px solid var(--seam);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--paper);
+  cursor: pointer;
+  pointer-events: auto;
+}
+#game-forecast:hover { background: #514a37; }
 .right-dock { align-items: center; }
 .dock #game-action { background: var(--gold); color: #352e20; }
 .message { bottom: calc(var(--bottom) + 92px); }

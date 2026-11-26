@@ -1,6 +1,7 @@
 'use strict';
 
-window.startLiuwanScene = function ({layout, jobMeter, cropStage, cropArt, assetUrl = file => file, createControls = window.createLiuwanControls} = {}) {
+window.startLiuwanScene = function ({layout, jobMeter, cropStage, cropArt, weatherForDay, traceVisible,
+  assetUrl = file => file, createControls = window.createLiuwanControls} = {}) {
 
   const E = window.GroundEngine;
   const G = window.LiuwanGame;
@@ -29,6 +30,7 @@ window.startLiuwanScene = function ({layout, jobMeter, cropStage, cropArt, asset
   let previousFrame = '';
   let previousView = '';
   let trailRevealed = false;
+  let traceRevealed = false;
 
   function layer() {
     const buffer = document.createElement('canvas');
@@ -116,8 +118,8 @@ window.startLiuwanScene = function ({layout, jobMeter, cropStage, cropArt, asset
     return bedColors[cells[Math.floor(y / TILE) * world.cols + Math.floor(x / TILE)]];
   }
 
-  function drawBeds(game) {
-    const signature = game.plots.map(plot => !plot.tilled ? 0 : plot.watered === null ? 1 : 2).join('');
+  function drawBeds(game, rain) {
+    const signature = game.plots.map(plot => !plot.tilled ? 0 : rain || plot.watered !== null ? 2 : 1).join('');
     if (signature === previousGround) return;
     previousGround = signature;
     const cells = [...world.cells];
@@ -127,7 +129,7 @@ window.startLiuwanScene = function ({layout, jobMeter, cropStage, cropArt, asset
       for (let dy = 0; dy < plot.size / TILE; dy++) {
         for (let dx = 0; dx < plot.size / TILE; dx++) {
           const i = (plot.y / TILE + dy) * world.cols + plot.x / TILE + dx;
-          cells[i] = status.tilled ? status.watered === null ? 'dry' : 'wet' : 'grass';
+          cells[i] = status.tilled ? rain || status.watered !== null ? 'wet' : 'dry' : 'grass';
         }
       }
     }
@@ -309,6 +311,46 @@ window.startLiuwanScene = function ({layout, jobMeter, cropStage, cropArt, asset
     }
   }
 
+  function drawWeather(weather, phase) {
+    if (weather === 'clear') return;
+    if (weather === 'haze') {
+      scene.fillStyle = '#a6a58c36';
+      scene.fillRect(view.x, view.y, view.width, view.height);
+      return;
+    }
+    scene.fillStyle = '#5c7c9050';
+    scene.fillRect(view.x, view.y, view.width, view.height);
+    if (reducedMotion.matches) return;
+    scene.fillStyle = '#b9e3e88c';
+    const left = Math.floor(view.x / TILE), top = Math.floor(view.y / TILE);
+    const right = Math.ceil((view.x + view.width) / TILE), bottom = Math.ceil((view.y + view.height) / TILE);
+    for (let row = top; row < bottom; row++) {
+      for (let col = left; col < right; col++) {
+        const seed = E.hash(col, row);
+        const x = col * TILE + ((seed >>> 5) + phase) % TILE;
+        const y = row * TILE + (seed + phase * 5) % TILE;
+        scene.fillRect(x, y, 1, 3);
+        scene.fillRect(x + 1, y - 3, 1, 3);
+      }
+    }
+  }
+
+  function drawTrace(phase) {
+    const [col, row] = layout.trace;
+    const x = col * TILE + 16, y = row * TILE + 19;
+    const lift = reducedMotion.matches ? 0 : Math.round(Math.sin(phase / 4) * 2);
+    scene.fillStyle = '#72998d62';
+    scene.fillRect(x - 9, y - 3, 18, 6);
+    scene.fillStyle = '#3d625c';
+    scene.fillRect(x - 5, y - 7 + lift, 10, 6);
+    scene.fillStyle = '#b9d7a9';
+    scene.fillRect(x - 3, y - 8 + lift, 6, 5);
+    scene.fillRect(x - 6, y - 11 + lift, 2, 2);
+    scene.fillRect(x + 5, y - 4 + lift, 2, 2);
+    scene.fillStyle = '#f0edb3';
+    scene.fillRect(x - 1, y - 10 + lift, 3, 5);
+  }
+
   function drawFishing(person, motion, phase) {
     const ripple = reducedMotion.matches ? 6 : 5 + phase % 12 / 2;
     scene.strokeStyle = '#d0ede0';
@@ -427,7 +469,8 @@ window.startLiuwanScene = function ({layout, jobMeter, cropStage, cropArt, asset
   }
 
   function drawScene(game, position, hovered, placement, motion, phase, hitFrame) {
-    drawBeds(game);
+    const weather = weatherForDay?.(game.day) ?? 'clear';
+    drawBeds(game, weather === 'rain');
     scene.drawImage(groundLayer.canvas, view.x, view.y, view.width, view.height, view.x, view.y, view.width, view.height);
     if (layout && !reducedMotion.matches) drawWater(phase);
     for (const patch of mudPatches) {
@@ -509,6 +552,10 @@ window.startLiuwanScene = function ({layout, jobMeter, cropStage, cropArt, asset
     }
     if (layout) {
       drawDaylight(dayMinute, sun);
+      if (regionAt(position) === liuwan) {
+        drawWeather(weather, phase);
+        if (traceRevealed) drawTrace(phase);
+      }
       drawFishing(person, motion, phase);
     }
     for (const actor of visible) {
@@ -561,6 +608,7 @@ window.startLiuwanScene = function ({layout, jobMeter, cropStage, cropArt, asset
 
   function draw(game, position, hovered, placement, motion) {
     trailRevealed = game.submitted;
+    traceRevealed = traceVisible?.(game) ?? false;
     const width = stage.clientWidth, height = stage.clientHeight;
     if (width < 1 || height < 1) return;
     const region = regionAt(position);
@@ -583,7 +631,7 @@ window.startLiuwanScene = function ({layout, jobMeter, cropStage, cropArt, asset
     const phase = layout && !reducedMotion.matches ? Math.floor(game.minute * 12) : 0;
     const hitFrame = motion?.hit ? Math.floor((game.minute - motion.hit.minute) * 20) : 0;
     const swingFrame = layout && game.action ? Math.floor((game.action.at - game.minute) * 22) : 0;
-    const signature = JSON.stringify([position, hovered?.kind, hovered?.id, game.stations, placement, game.submitted,
+    const signature = JSON.stringify([position, hovered?.kind, hovered?.id, game.stations, placement, game.submitted, traceRevealed,
       layout ? [game.strikes, game.depleted, Boolean(game.entries.rockSalt), game.action?.key, swingFrame,
         phase, game.day, Math.floor(game.minute), reducedMotion.matches, motion.facing, motion.hit, hitFrame,
         motion.fishing, motion.ripples, motion.packing] : game.minute >= game.mineReady,
@@ -667,6 +715,10 @@ window.startLiuwanScene = function ({layout, jobMeter, cropStage, cropArt, asset
     {kind: 'forage', site: 'woods', actor: 'seedBox', label: '收集种子', points: [[16, 5]]},
     ...plotTargets,
   ];
+  if (layout?.trace) {
+    const tile = layout.trace;
+    targets.push({kind: 'trace', label: '芥菜余绪', tile, points: [tile, ...adjacent(tile)]});
+  }
   if (southPass) {
     const trailTargets = [
       ['trail', southPass.gate, '南山道入口'],
@@ -742,7 +794,7 @@ window.startLiuwanScene = function ({layout, jobMeter, cropStage, cropArt, asset
     const stations = {...game.stations, [kind]: tile};
     const occupied = new Set(obstacles(stations, game));
     const origin = regionAt(game.position) === liuwan ? game.position : archiveDoor[0];
-    return targets.filter(target => target.kind !== 'plot' && target.kind !== 'return' && target.kind !== 'waystone' &&
+    return targets.filter(target => target.kind !== 'plot' && target.kind !== 'return' && target.kind !== 'waystone' && target.kind !== 'trace' &&
       (!layout || target.kind !== 'resource' || !game.depleted[target.id]) &&
       (!layout || target.points.length || stations[target.kind])).every(target => {
       const points = stations[target.kind] ? adjacent(stations[target.kind]) : target.points;
@@ -754,6 +806,9 @@ window.startLiuwanScene = function ({layout, jobMeter, cropStage, cropArt, asset
     const plot = E.plotAt(world, x, y);
     if (layout) {
       const col = Math.floor(x / TILE), row = Math.floor(y / TILE);
+      if (traceRevealed && col === layout.trace[0] && row === layout.trace[1]) {
+        return targets.find(target => target.kind === 'trace');
+      }
       if (tool === 'rod' && col >= world.shoreColumns[row]) {
         const spot = fishingByTile.get([col, row].join(','));
         const accessible = candidate => candidate.points.some(point => G.passable(world, blocked, ...point));
@@ -764,7 +819,7 @@ window.startLiuwanScene = function ({layout, jobMeter, cropStage, cropArt, asset
           return accessible(candidate) && (!best || distance(candidate) < distance(best)) ? candidate : best;
         }, null);
       }
-      const facility = targets.find(target => target.kind !== 'resource' &&
+      const facility = targets.find(target => target.kind !== 'resource' && target.kind !== 'trace' &&
         (target.kind !== 'trail' || trailRevealed) &&
         target.tile?.[0] === col && target.tile[1] === row);
       if (facility) return facility;

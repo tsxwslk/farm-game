@@ -1,7 +1,7 @@
 import * as z from 'zod';
 import { BAG_SLOTS, CROP_IDS, ENTRIES, HOTBAR_COLUMNS, ITEMS, LIUWAN_ROWS, MAX_BAG_SLOTS, RECIPES, RESOURCES, SOUTH_PASS, STARTING_TOOLS, STATIONS,
   TILL_HITS, TOOLS, TRADE, WAREHOUSE_SLOTS, WATER_CAPACITY, type Tool } from './content';
-import { canTravel, DAY, SAVE_VERSION, type Game } from './game';
+import { canTravel, DAY, SAVE_VERSION, waterByRain, type Game } from './game';
 import { count, equippedTool, startingInventory } from './inventory';
 import type { Plot, World } from './scene';
 
@@ -49,12 +49,17 @@ const gameV7 = previousGame.extend({
   plots: z.array(oldPlot.extend({ crop: z.enum(CROP_IDS).nullable() })),
   commissions: z.strictObject({ radishStockDay: whole, trailFood: z.boolean() }),
 });
-const gameSchema = gameV7.extend({
-  schemaVersion: z.literal(SAVE_VERSION),
+const gameV8 = gameV7.extend({
+  schemaVersion: z.literal(8),
   hotbarRow: whole.max(MAX_BAG_SLOTS / HOTBAR_COLUMNS - 1),
   equippedSlot: whole.max(MAX_BAG_SLOTS - 1).nullable(),
   bag: z.array(stack).min(BAG_SLOTS).max(MAX_BAG_SLOTS).refine(slots => slots.length % HOTBAR_COLUMNS === 0),
   warehouse: z.array(stack).min(WAREHOUSE_SLOTS).refine(slots => slots.length % WAREHOUSE_SLOTS === 0),
+});
+const gameSchema = gameV8.extend({
+  schemaVersion: z.literal(SAVE_VERSION),
+  mustardTrace: z.enum(['unfound', 'collected', 'restored']),
+  pakChoiSeedStock: whole.max(TRADE.dailySeeds),
 });
 
 const saveSchema = z.strictObject({
@@ -179,7 +184,13 @@ const migrations: Partial<Record<number, (save: unknown, world: World) => unknow
   7(value) {
     const parsed = saveSchema.extend({ game: gameV7 }).safeParse(value);
     if (!parsed.success) throw new Error('旧存档格式有误。');
-    return { ...parsed.data, game: { ...parsed.data.game, schemaVersion: SAVE_VERSION } };
+    return { ...parsed.data, game: { ...parsed.data.game, schemaVersion: 8 } };
+  },
+  8(value) {
+    const parsed = saveSchema.extend({ game: gameV8 }).safeParse(value);
+    if (!parsed.success) throw new Error('旧存档格式有误。');
+    return { ...parsed.data, game: { ...parsed.data.game, schemaVersion: SAVE_VERSION,
+      mustardTrace: 'unfound', pakChoiSeedStock: TRADE.dailySeeds } };
   },
 };
 
@@ -248,6 +259,12 @@ export function validateSave(value: unknown, world: World): Save {
       game.entries.fishSoup?.lit || jobs.some(job => 'salt' in RECIPES[job.recipe].inputs)) {
     game.entries.salt ??= { lit: true, deadline: null };
   }
+  const traceCount = count(game, 'mustardTrace') + count(game, 'mustardTrace', 'warehouse');
+  if (traceCount !== Number(game.mustardTrace === 'collected') ||
+      (game.mustardTrace === 'restored') !== Boolean(game.entries.mustard)) {
+    throw new Error('存档内的芥菜余绪状态有误。');
+  }
+  if (typeof version === 'number' && version < SAVE_VERSION) waterByRain(game);
   return parsed.data;
 }
 

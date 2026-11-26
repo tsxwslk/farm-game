@@ -1,15 +1,18 @@
 import {
-  COMMISSIONS, CROPS, CROP_IDS, ENTRIES, HOTBAR_COLUMNS, INVENTORY_INFO, ITEMS, KILN_COST, LIUWAN_ROWS, RECIPES, RESOURCES, SOUTH_PASS, STATIONS, TRADE, WAREHOUSE_SLOTS, WATER_CAPACITY,
+  COMMISSIONS, CROPS, CROP_IDS, ENTRIES, HOTBAR_COLUMNS, INVENTORY_INFO, ITEMS, KILN_COST, LIUWAN_ROWS, MUSTARD_TRACE,
+  RECIPES, RESOURCES, SOUTH_PASS, STATIONS, TRADE, WAREHOUSE_SLOTS, WATER_CAPACITY,
   type CommissionId, type EntryId, type Point, type Recipe, type RecipeId, type Station,
 } from './content';
 import {
-  canBuild, canSubmit, canTravel, claimJob, claimPakChoiSeeds, claimSeed, commissionStatus, costs, deliverCommission, expandStorage,
-  hasMaterials, jobMeter, needsSeed, saveSeed, startJob, storageUpgrade, submit, trade, tradeLimit, warnSale, type Game, type TradeItem,
+  canBuild, canSubmit, canTravel, claimJob, claimMustardSeed, claimPakChoiSeeds, claimSeed, commissionStatus, costs, deliverCommission, expandStorage,
+  hasMaterials, jobMeter, mustardTraceVisible, needsSeed, restoreMustard, saveSeed, startJob, storageUpgrade, submit, trade, tradeLimit, warnSale,
+  type Game, type TradeItem,
 } from './game';
 import type { World } from './scene';
 import { makeSlotRow, stackIcon } from './hotbar';
 import { bindInventoryDrag } from './inventory-drag';
 import { count, stackCount, stackName, type SlotAddress, type Stack, type Storage } from './inventory';
+import { FORECAST_DAYS, liuwanWeather, WEATHER_LABELS } from './weather';
 
 export function node<T extends HTMLElement = HTMLElement>(id: string) {
   return document.getElementById(id) as T;
@@ -294,6 +297,7 @@ export function stationPanel(game: Game, station: Station, update: (message: str
   for (const id of Object.keys(RECIPES) as RecipeId[]) {
     const recipe: Recipe = RECIPES[id];
     if (recipe.station !== station || (id === 'fishSoup' && !game.entries.crucian) ||
+      (id === 'mustardPickle' && game.mustardTrace !== 'restored') ||
       (recipe.requiresArchive && !game.submitted)) continue;
     list.append(listRow(recipe.label + ' · ' + costs(recipe.inputs) + ' → ' + ITEMS[recipe.output] + ' ×' + recipe.outputQuantity,
       button('开工', () => update(startJob(game, id)), !hasMaterials(game, recipe.inputs), true)));
@@ -305,14 +309,16 @@ export function stationPanel(game: Game, station: Station, update: (message: str
 
 export class TradingBook {
   private side: 'sell' | 'buy' = 'sell';
-  private showCommissions = false;
+  private page: 'trade' | 'commissions' | 'restore' = 'trade';
   private item: TradeItem = 'radish';
   refresh = () => {};
   focus = () => {};
 
   render(parent: HTMLElement, game: Game, report: (message: string) => void) {
-    if (!game.submitted && (this.item === 'pakChoi' || this.item === 'pakChoiPickle')) this.item = 'radish';
-    if (!game.submitted) this.showCommissions = false;
+    if (!game.submitted && (this.item === 'pakChoi' || this.item === 'pakChoiPickle' || this.item === 'pakChoiSeeds')) {
+      this.item = this.side === 'sell' ? 'radish' : 'seeds';
+    }
+    if (!game.submitted && this.page === 'commissions') this.page = 'trade';
     const redraw = () => {
       this.render(parent, game, report);
       this.focus();
@@ -320,19 +326,40 @@ export class TradingBook {
     const tabs = element('div', undefined, 'sheet-tabs');
     for (const side of ['sell', 'buy'] as const) {
       tabs.append(setPressed(button(side === 'sell' ? '出售' : '买入', () => {
-        this.showCommissions = false;
+        this.page = 'trade';
         this.side = side;
         this.item = side === 'sell' ? 'radish' : 'seeds';
         redraw();
-      }), side === this.side && !this.showCommissions));
+      }), side === this.side && this.page === 'trade'));
     }
     const boardTab = setPressed(button('委托簿', () => {
-      this.showCommissions = true;
+      this.page = 'commissions';
       redraw();
-    }), this.showCommissions);
+    }), this.page === 'commissions');
     boardTab.hidden = !game.submitted;
-    tabs.append(boardTab);
-    if (this.showCommissions && game.submitted) {
+    const restoreTab = setPressed(button('复原种源', () => {
+      this.page = 'restore';
+      redraw();
+    }), this.page === 'restore');
+    tabs.append(boardTab, restoreTab);
+    if (this.page === 'restore') {
+      const restored = game.mustardTrace === 'restored';
+      const held = count(game, 'mustardTrace') > 0;
+      const description = restored ? '芥菜种源已复原。收获的芥菜可以留种。' :
+        held ? '将背包里的芥菜余绪复原成两粒种子。' :
+        count(game, 'mustardTrace', 'warehouse') ? '芥菜余绪在仓库里，先取到背包。' : ENTRIES.mustard.clue;
+      const actions = element('div', undefined, 'sheet-actions');
+      if (restored && needsSeed(game, 'mustard')) {
+        actions.append(button('补领芥菜种子 ×1', () => { report(claimMustardSeed(game)); redraw(); }));
+      } else if (!restored) {
+        actions.append(button('复原芥菜种子 ×' + MUSTARD_TRACE.seedQuantity, () => { report(restoreMustard(game)); redraw(); }, !held));
+      }
+      this.refresh = () => {};
+      this.focus = () => restoreTab.focus({ preventScroll: true });
+      parent.replaceChildren(tabs, element('p', description, 'sheet-note'), actions);
+      return;
+    }
+    if (this.page === 'commissions') {
       this.focus = () => boardTab.focus({ preventScroll: true });
       const clue = element('p', canTravel(game)
         ? '南山道已开放。从南侧扩垦地西边沿小径向南，至入口按 F。'
@@ -376,7 +403,7 @@ export class TradingBook {
     const headings = element('div', undefined, 'trade-grid trade-grid-header');
     headings.append(element('span', '物品'), element('span', '单价'), element('span', this.side === 'sell' ? '可出售' : '今日库存'));
     for (const [id, price] of Object.entries(TRADE[this.side]) as [TradeItem, number][]) {
-      if (!game.submitted && (id === 'pakChoi' || id === 'pakChoiPickle')) continue;
+      if (!game.submitted && (id === 'pakChoi' || id === 'pakChoiPickle' || id === 'pakChoiSeeds')) continue;
       const row = element('li', undefined, 'trade-grid');
       const available = element('span');
       stock.push([id, available]);
@@ -385,7 +412,8 @@ export class TradingBook {
       list.append(row);
     }
     const id = this.item;
-    const price = id === 'seeds' ? TRADE.buy.seeds : TRADE.sell[id];
+    const buying = id === 'seeds' || id === 'pakChoiSeeds';
+    const price = buying ? TRADE.buy[id] : TRADE.sell[id];
     const form = element('form', undefined, 'trade-form');
     const label = element('label', '数量');
     const quantity = element('input');
@@ -418,7 +446,7 @@ export class TradingBook {
     const limitNote = element('p', undefined, 'sheet-note');
     limitNote.id = 'trade-limit';
     const seed = button('领取补种种子', () => { report(claimSeed(game)); this.refresh(); });
-    const archive = button('归档柳湾第一卷', () => { report(submit(game)); this.refresh(); });
+    const archive = button('归档柳湾第一卷', () => { report(submit(game)); redraw(); });
     const updateText = (node: HTMLElement, text: string) => {
       if (node.textContent !== text) node.textContent = text;
     };
@@ -432,12 +460,13 @@ export class TradingBook {
       add.disabled = !limit || (hasQuote && value >= limit);
       updateText(total, '合计 ' + (hasQuote ? value * price : 0) + ' 文');
       warning.hidden = !valid || !warnSale(game, id, value);
-      updateText(limitNote, id === 'seeds'
+      updateText(limitNote, buying
         ? limit ? '当前最多可买 ' + limit + ' 粒。' : '当前无可买数量，请查看库存、钱袋或背包。'
         : limit ? '当前最多可卖 ' + limit + ' 份。' : '背包无可出售的此物。');
       updateText(balance, '钱袋 ' + game.coins + ' 文');
       for (const [item, available] of stock) {
-        updateText(available, String(item === 'seeds' ? game.seedStock : count(game, item)));
+        updateText(available, String(item === 'seeds' ? game.seedStock :
+          item === 'pakChoiSeeds' ? game.pakChoiSeedStock : count(game, item)));
       }
       seed.hidden = !needsSeed(game);
       updateText(archive, game.submitted ? '第一卷已归档' : '归档柳湾第一卷');
@@ -473,6 +502,20 @@ export class TradingBook {
       element('h3', '田记所', 'section-title'), actions);
     this.refresh();
   }
+}
+
+export function forecastPanel(game: Game) {
+  const list = element('ul', undefined, 'sheet-list');
+  for (let offset = 0; offset < FORECAST_DAYS; offset++) {
+    const date = game.day + offset;
+    const row = element('li', undefined, 'sheet-row');
+    const weather = liuwanWeather(date);
+    row.append(element('span', offset === 0 ? '今天 · 第 ' + date + ' 天' : '第 ' + date + ' 天'),
+      element('strong', WEATHER_LABELS[weather]));
+    list.append(row);
+  }
+  const hint = game.mustardTrace === 'unfound' ? '霾天沿林缘到旧制盐台西侧，可以寻找芥菜余绪。' : '';
+  return [list, element('p', '雨天会浇湿菜畦。' + hint, 'sheet-note')];
 }
 
 export function ledgerPanel(game: Game, selected: EntryId, select: (id: EntryId) => void) {
@@ -543,6 +586,7 @@ export function mapPanel(world: World, game: Game, ripples: Point[]) {
     for (const { label, tile, mark } of world.landmarks) marker(label, ...tile, mark);
     for (const tile of ripples) marker('涟漪钓点', ...tile, '钓');
     if (game.entries.rockSalt) marker('岩盐发现处', ...RESOURCES['buried-salt'].tile, '盐');
+    if (mustardTraceVisible(game)) marker('旧制盐台西侧 · 芥菜余绪', ...MUSTARD_TRACE.tile, '绪');
     if (game.submitted) marker(canTravel(game) ? '南山道入口' : '南山道 · 备齐行粮后开放', ...SOUTH_PASS.gate, '道');
     for (const [station, position] of Object.entries(game.stations) as [Station, [number, number]][]) {
       marker(STATIONS[station], ...position, station === 'kiln' ? '灶' : '缸');

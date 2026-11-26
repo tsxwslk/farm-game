@@ -1,14 +1,15 @@
 import {
-  BAG_SLOTS, BAG_UPGRADE_PRICES, COMMISSIONS, CROPS, CROP_IDS, ENTRIES, HOTBAR_COLUMNS, ITEMS, KILN_COST, RECIPES, RESOURCES, SOUTH_PASS, STATIONS,
+  BAG_SLOTS, BAG_UPGRADE_PRICES, COMMISSIONS, CROPS, CROP_IDS, ENTRIES, HOTBAR_COLUMNS, ITEMS, KILN_COST, MUSTARD_TRACE, RECIPES, RESOURCES, SOUTH_PASS, STATIONS,
   STATION_ITEMS, TILL_HITS, TOOLS, TRADE, WAREHOUSE_SLOTS, WAREHOUSE_UPGRADE, WATER_CAPACITY,
   type CommissionId, type EntryId, type Item, type Point, type Recipe, type RecipeId, type Station, type Tool,
 } from './content';
 import type { CropStage, Plot, Target, World } from './scene';
 import { batchesFor, consume, count, equippedStack, equippedTool, hasRoom, receive, startingInventory, type Stack, type Storage } from './inventory';
+import { liuwanWeather } from './weather';
 
 export const DAY = 1080;
 export const START: Point = [11, 6];
-export const SAVE_VERSION = 8;
+export const SAVE_VERSION = 9;
 export interface Entry {
   lit: boolean;
   deadline: number | null;
@@ -52,7 +53,9 @@ export interface Game {
   chestOpened: boolean;
   submitted: boolean;
   commissions: { radishStockDay: number; trailFood: boolean };
+  mustardTrace: 'unfound' | 'collected' | 'restored';
   seedStock: number;
+  pakChoiSeedStock: number;
   log: string[];
   account: Account;
 }
@@ -63,8 +66,9 @@ export function newGame(world: World): Game {
     day: 1, minute: 0, review: false, position: [...START], hotbarRow: 0, equippedSlot: null, water: 0, coins: 0,
     plots: world.plots.map(() => ({ tilled: false, planted: null, watered: null, crop: null })),
     stations: {}, ...startingInventory(), entries: {}, jobs: {}, strikes: {}, depleted: {}, action: null,
-    chestOpened: false, submitted: false, seedStock: TRADE.dailySeeds, log: [],
+    chestOpened: false, submitted: false, seedStock: TRADE.dailySeeds, pakChoiSeedStock: TRADE.dailySeeds, log: [],
     commissions: { radishStockDay: 0, trailFood: false },
+    mustardTrace: 'unfound',
     account: { income: 0, expenses: 0, royalties: 0 },
   };
 }
@@ -215,6 +219,7 @@ export function targetAction(game: Game, target: Target): { label: string; tool?
     case 'water': return { tool: 'can' as const, label: '取水' };
     case 'fishing': return { tool: 'rod', label: '抛竿' };
     case 'ruin': return { label: '查看旧制盐台' };
+    case 'trace': return { label: '采集芥菜余绪' };
     case 'trail': return { label: canTravel(game) ? '前往' + SOUTH_PASS.name : '查看山道入口' };
     case 'return': return { label: '返回柳湾' };
     case 'waystone': return { label: '查看路碑' };
@@ -240,6 +245,7 @@ export function operate(
 ): string {
   const { tool, label, hits } = targetAction(game, target);
   if (game.review) return '请先确认日结。';
+  if (target.kind === 'trace') return collectMustardTrace(game);
   if (tool && equippedTool(game) !== tool) return '需要' + TOOLS[tool].name + '。';
   if (target.kind === 'plot' && tool === 'pick' && !hits) return '这块地还有作物，收获后可恢复草地。';
   if (hits && tool) {
@@ -288,6 +294,10 @@ export function operate(
     consume(game, CROPS[crop].seed, 1, Infinity, game.equippedSlot!);
     plot.crop = crop;
     plot.planted = game.minute;
+    if (liuwanWeather(game.day) === 'rain') {
+      plot.watered = game.minute;
+      return record(game, '播下了' + ITEMS[crop] + '。雨水已经浇透菜畦。');
+    }
     return record(game, '播下了' + ITEMS[crop] + '。');
   }
   if (label === '浇水') {
@@ -372,9 +382,48 @@ export function nextDay(game: Game, reviewDay: number) {
   game.day++;
   game.review = false;
   game.seedStock = TRADE.dailySeeds;
+  game.pakChoiSeedStock = TRADE.dailySeeds;
   game.log = [];
   game.account = { income: 0, expenses: 0, royalties: 0 };
+  waterByRain(game);
   return true;
+}
+
+export function waterByRain(game: Game) {
+  if (game.review || liuwanWeather(game.day) !== 'rain') return;
+  for (const plot of game.plots) {
+    if (plot.crop !== null && plot.watered === null) plot.watered = game.minute;
+  }
+}
+
+export function mustardTraceVisible(game: Game) {
+  return game.mustardTrace === 'unfound' && liuwanWeather(game.day) === 'haze';
+}
+
+function collectMustardTrace(game: Game) {
+  if (!mustardTraceVisible(game)) return '这里暂时看不到芥菜余绪。';
+  if (!hasRoom(game, 'mustardTrace')) return '背包满了。腾出一格后再采集。';
+  receive(game, 'mustardTrace', 1);
+  game.mustardTrace = 'collected';
+  return record(game, '采到了芥菜余绪。带回田记所复原种子。');
+}
+
+export function restoreMustard(game: Game) {
+  if (game.review || game.mustardTrace !== 'collected') return '没有待复原的芥菜余绪。';
+  const slot = game.bag.findIndex(stack => stack?.id === 'mustardTrace');
+  if (slot < 0) return '先把芥菜余绪取到背包。';
+  consume(game, 'mustardTrace', 1, Infinity, slot);
+  receive(game, 'mustardSeeds', MUSTARD_TRACE.seedQuantity);
+  game.mustardTrace = 'restored';
+  game.entries.mustard ??= { lit: false, deadline: null };
+  return record(game, '复原了芥菜种子 ×' + MUSTARD_TRACE.seedQuantity + '。');
+}
+
+export function claimMustardSeed(game: Game) {
+  if (game.review || game.mustardTrace !== 'restored' || !needsSeed(game, 'mustard')) return '当前无需补领芥菜种子。';
+  if (!hasRoom(game, 'mustardSeeds')) return '背包满了。腾出一格后再领取。';
+  receive(game, 'mustardSeeds', 1);
+  return record(game, '从田记所补领芥菜种子 ×1。');
 }
 
 export function renewResources(game: Game, world: World) {
@@ -416,10 +465,10 @@ export function expandStorage(game: Game, storage: Storage, quotedSlots: number)
 }
 
 export function tradeLimit(game: Game, item: TradeItem) {
-  if (!game.submitted && (item === 'pakChoi' || item === 'pakChoiPickle')) return 0;
-  if (item !== 'seeds') return count(game, item);
+  if (!game.submitted && (item === 'pakChoi' || item === 'pakChoiPickle' || item === 'pakChoiSeeds')) return 0;
+  if (item !== 'seeds' && item !== 'pakChoiSeeds') return count(game, item);
   if (!hasRoom(game, item)) return 0;
-  return Math.min(game.seedStock, Math.floor(game.coins / TRADE.buy.seeds));
+  return Math.min(item === 'seeds' ? game.seedStock : game.pakChoiSeedStock, Math.floor(game.coins / TRADE.buy[item]));
 }
 
 export function warnSale(game: Game, item: TradeItem, quantity: number) {
@@ -434,11 +483,12 @@ export function trade(game: Game, item: TradeItem, quantity: number) {
   if (game.review || !Number.isSafeInteger(quantity) || quantity < 1 || quantity > tradeLimit(game, item)) {
     return { ok: false, message: '交易未完成，请确认数量、钱袋和背包。' };
   }
-  if (item === 'seeds') {
-    const total = quantity * TRADE.buy.seeds;
+  if (item === 'seeds' || item === 'pakChoiSeeds') {
+    const total = quantity * TRADE.buy[item];
     game.coins -= total;
     game.account.expenses += total;
-    game.seedStock -= quantity;
+    if (item === 'seeds') game.seedStock -= quantity;
+    else game.pakChoiSeedStock -= quantity;
     receive(game, item, quantity);
     return { ok: true, message: record(game, '买入' + ITEMS[item] + ' ×' + quantity + '，支出 ' + total + ' 文。') };
   }

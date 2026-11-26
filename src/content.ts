@@ -16,6 +16,10 @@ export const ITEMS = {
   pakChoiSeeds: '小白菜种子',
   pakChoi: '小白菜',
   pakChoiPickle: '盐渍小白菜',
+  mustardTrace: '芥菜余绪',
+  mustardSeeds: '芥菜种子',
+  mustard: '芥菜',
+  mustardPickle: '盐渍芥菜',
 } as const;
 export type Item = keyof typeof ITEMS;
 
@@ -46,9 +50,13 @@ export const INVENTORY_INFO = {
   kiln: ['设施', '摆在可达的空地上，可制盐、烧缸和炖鱼汤。'],
   crucian: ['鱼获', '从柳湾河钓得，可加粗盐炖汤，也可卖给田记所。'],
   fishSoup: ['加工品', '鲫鱼加粗盐炖成的汤，可卖给田记所。'],
-  pakChoiSeeds: ['种子', '第一卷归档后可从田记所领种，在翻好的菜畦里播种。'],
+  pakChoiSeeds: ['种子', '第一卷归档后可在田记所买入或领种，在翻好的菜畦里播种。'],
   pakChoi: ['作物', '可留种，也可加粗盐腌制。'],
   pakChoiPickle: ['加工品', '田记所用它试备山道行粮。'],
+  mustardTrace: ['余绪', '从旧制盐台西侧采得，带回田记所可复原芥菜种子。'],
+  mustardSeeds: ['种子', '在田记所复原所得，可在翻好的菜畦里播种。'],
+  mustard: ['作物', '可留种，也可加入粗盐制成盐渍芥菜。'],
+  mustardPickle: ['加工品', '以芥菜和粗盐腌成的咸菜。'],
 } as const satisfies Record<Item | Tool, readonly [string, string]>;
 
 export const HOTBAR_COLUMNS = 8;
@@ -67,6 +75,7 @@ export const KILN_COST = { stone: 4, wood: 2 };
 export const CROPS = {
   radish: { seed: 'seeds', seedYield: 2, pickle: 'pickle', art: 'cherry-radish', stages: [35, 90, 180, 300], middleLabel: '根部膨大' },
   pakChoi: { seed: 'pakChoiSeeds', seedYield: 2, pickle: 'pakChoiPickle', art: 'pak-choi', stages: [45, 110, 230, 360], middleLabel: '叶丛展开' },
+  mustard: { seed: 'mustardSeeds', seedYield: 2, pickle: 'mustardPickle', art: 'mustard', stages: [40, 95, 200, 320], middleLabel: '锯齿叶展开' },
 } as const satisfies Record<string, {
   seed: Item; seedYield: number; pickle?: Item; art: string; stages: readonly [number, number, number, number]; middleLabel: string;
 }>;
@@ -107,6 +116,10 @@ export const RECIPES = {
     label: '腌小白菜', station: 'jar', inputs: { pakChoi: 1, salt: 3 }, output: 'pakChoiPickle', outputQuantity: 1,
     duration: 75, timedInputs: ['pakChoi'], carryDeadline: 'pakChoi', outputEntry: 'pakChoiPickle', requiresArchive: true,
   },
+  mustardPickle: {
+    label: '腌芥菜', station: 'jar', inputs: { mustard: 1, salt: 3 }, output: 'mustardPickle', outputQuantity: 1,
+    duration: 75, timedInputs: ['mustard'], anchors: [{ input: 'mustard', entry: 'mustard' }], outputEntry: 'mustardPickle',
+  },
 } as const satisfies Record<string, Recipe<Item>>;
 export type RecipeId = keyof typeof RECIPES;
 
@@ -120,6 +133,11 @@ export const ENTRIES = {
     section: '草木册', reward: 55, duration: 480,
     clue: '第一卷归档后，田记所的委托簿有小白菜种源。',
     use: '将小白菜用粗盐腌制，趁这批线索仍在，将成品交给田记所备作山道行粮。',
+  },
+  mustard: {
+    section: '草木册', reward: 55, duration: 480,
+    clue: '霾天去旧制盐台西侧寻找余绪，带回田记所复原种子。',
+    use: `用腌菜缸把芥菜 ×${RECIPES.mustardPickle.inputs.mustard} 和粗盐 ×${RECIPES.mustardPickle.inputs.salt} 腌成盐渍芥菜。`,
   },
   rockSalt: {
     section: '矿物册', reward: 45, duration: 720,
@@ -156,11 +174,16 @@ export const ENTRIES = {
     clue: '在腌菜缸中用粗盐腌制小白菜。',
     use: '交到田记所，试备山道行粮。',
   },
+  mustardPickle: {
+    section: '加工品册', reward: 30, duration: 0,
+    clue: '在腌菜缸中用粗盐腌制芥菜。',
+    use: '把鲜芥菜用盐腌住，便于保存。',
+  },
 } as const;
 export type EntryId = keyof typeof ENTRIES;
 
 export const TRADE = { sell: { radish: 12, pickle: 30, crucian: 16, fishSoup: 26, pakChoi: 14, pakChoiPickle: 30 },
-  buy: { seeds: 6 }, dailySeeds: 6 } as const;
+  buy: { seeds: 6, pakChoiSeeds: 7 }, dailySeeds: 6 } as const;
 export const STARTING_SEEDS = 3;
 export const COMMISSIONS = {
   radishStock: { name: '萝卜补库', item: 'radish', quantity: 2, reward: 30 },
@@ -231,3 +254,4 @@ export const RESOURCES: Record<string, Resource> = {
 };
 
 export const SALT_RUIN: Point = [35, 5];
+export const MUSTARD_TRACE = { tile: [33, 5] as Point, seedQuantity: 2 } as const;

@@ -1,7 +1,7 @@
-import { HOTBAR_COLUMNS, ITEMS, RECIPES, SOUTH_PASS, STATIONS, STATION_ITEMS, TOOLS, type EntryId, type Point, type Station } from './content';
+import { CROPS, CROP_IDS, HOTBAR_COLUMNS, ITEMS, RECIPES, SOUTH_PASS, STATIONS, STATION_ITEMS, TOOLS, type EntryId, type Point, type Station } from './content';
 import {
   advance, canBuild, canTravel, catchFish, formatClock, growthStatus, jobMeter, newGame, nextDay, operate, packStation, place,
-  renewResources, targetAction, targetKey, targetProgress,
+  mustardTraceVisible, renewResources, targetAction, targetKey, targetProgress,
   type Game,
 } from './game';
 import { createHotbar } from './hotbar';
@@ -9,9 +9,10 @@ import {
   castOutcome, MAX_CAST_TIME, REEL_HITS, REEL_MISSES, REEL_TIME, REEL_ZONES, reelPosition, RIPPLE_INTERVAL, rippleSpots, sameTile,
 } from './fishing';
 import { equipSlot, equippedStack, equippedTool, moveStack, type SlotAddress } from './inventory';
-import { bindHotbarItemCard, TradingBook, element, inventoryPanel, ledgerPanel, mapPanel, node, stationPanel } from './panels';
+import { bindHotbarItemCard, TradingBook, element, forecastPanel, inventoryPanel, ledgerPanel, mapPanel, node, stationPanel } from './panels';
 import { createSaveControls } from './save-controls';
 import type { Motion, Placement, Scene, Target } from './scene';
+import { liuwanWeather, WEATHER_LABELS } from './weather';
 
 const TILE = 32;
 const WALK_SPEED = 6;
@@ -20,7 +21,7 @@ const SLOT_WHEEL_THRESHOLD = 32;
 const SLOT_WHEEL_PAUSE_MS = 95;
 const SLOT_WHEEL_NOTCH_MS = 28;
 const MOVES: Record<string, Point> = { w: [0, -1], a: [-1, 0], s: [0, 1], d: [1, 0] };
-type Panel = 'bag' | 'warehouse' | 'ledger' | 'map' | 'saves' | 'archive' | Station;
+type Panel = 'bag' | 'warehouse' | 'ledger' | 'map' | 'saves' | 'archive' | 'forecast' | Station;
 
 export async function createControls(scene: Scene) {
   const { world, canvas, view, zoom, targets, plotTargets, fishingSpots, blocked, draw, pick, setStations, canPlace } = scene;
@@ -123,7 +124,8 @@ export async function createControls(scene: Scene) {
   function activeTarget() {
     const tool = equippedTool(game);
     const matchesTool = (target: Target) => target.kind === 'fishing' ? tool === 'rod' :
-      (target.kind !== 'water' || tool !== 'rod') && (target.kind !== 'trail' || game.submitted);
+      (target.kind !== 'water' || tool !== 'rod') && (target.kind !== 'trail' || game.submitted) &&
+      (target.kind !== 'trace' || mustardTraceVisible(game));
     if (selected && isNear(selected) && matchesTool(selected)) return selected;
     if (hovered && isNear(hovered) && matchesTool(hovered)) return hovered;
     if (tool === 'rod') {
@@ -135,7 +137,7 @@ export async function createControls(scene: Scene) {
       (target.kind !== 'resource' || !game.depleted[targetKey(target)]));
     const facilities = nearby.filter(target =>
       target.kind === 'archive' || target.kind === 'chest' || target.kind === 'kiln' || target.kind === 'jar' ||
-      target.kind === 'trail' || target.kind === 'return' || target.kind === 'waystone');
+      target.kind === 'trail' || target.kind === 'return' || target.kind === 'waystone' || target.kind === 'trace');
     const [x, y] = game.position;
     const ahead: Point = [x + facing[0], y + facing[1]];
     const farmTargets = [game.position, ahead].flatMap(([col, row]) => {
@@ -315,11 +317,12 @@ export async function createControls(scene: Scene) {
     const firstWater = target.kind === 'plot' && game.plots.every(plot => plot.watered === null) &&
       !game.entries.radish && !game.entries.rockSalt;
     const result = operate(game, target, clearPlot);
+    if (target.kind === 'trace' && !mustardTraceVisible(game)) selected = hovered = null;
     if (equippedTool(game) === 'can' && (result === '浇过水了。' || result === '水壶已装满。')) {
       hit = { tool: 'can', point: impactPoint(target), minute: game.minute };
     }
-    report(firstWater && result === '浇过水了。'
-      ? '萝卜开始生长。田记所东边的小径通往北侧林缘，旧制盐台就在林缘东头。'
+    report(firstWater && game.plots[Number(target.id)].watered !== null
+      ? result + '田记所东边的小径通往北侧林缘，旧制盐台就在林缘东头。'
       : result);
     void saves.save();
   }
@@ -372,6 +375,7 @@ export async function createControls(scene: Scene) {
     node('review-body').replaceChildren(
       element('p', '出售 ' + income + ' 文 · 买入 ' + expenses + ' 文 · 稿酬 ' + royalties + ' 文'),
       element('p', '钱袋 ' + game.coins + ' 文', 'sheet-note'),
+      element('p', '柳湾明日天气 · ' + WEATHER_LABELS[liuwanWeather(game.day + 1)], 'sheet-note'),
       log.children.length ? log : element('p', '今天没有新记录。', 'sheet-note'),
     );
     if (!review.open) review.showModal();
@@ -440,7 +444,9 @@ export async function createControls(scene: Scene) {
     const target = activeTarget() ?? hovered ?? selected;
     const action = target && targetAction(game, target);
     const progress = target ? targetProgress(game, target) : null;
-    const name = action?.label === '播种' ? ITEMS.seeds + ' · ' : action?.tool ? TOOLS[action.tool].name + ' · ' : '';
+    const stack = equippedStack(game);
+    const seed = action?.label === '播种' && CROP_IDS.find(id => CROPS[id].seed === stack?.id);
+    const name = seed ? ITEMS[CROPS[seed].seed] + ' · ' : action?.tool ? TOOLS[action.tool].name + ' · ' : '';
     const suffix = (progress ? ' ' + progress.done + '/' + progress.total : '') +
       (target && isNear(target) ? ' · 点击 / F' : '');
     const growth = target?.kind === 'plot' && action?.label === '查看长势' ? growthStatus(game, game.plots[Number(target.id)]) : '';
@@ -454,7 +460,9 @@ export async function createControls(scene: Scene) {
     hotbarCard.update();
     showButton(actionButton, placement ? '取消' : fishing?.reel ? '收线' : fishing ? '收竿' : '操作', placement ? 'Esc' : 'F');
     showText(node('game-coins'), game.coins + ' 文');
-    showText(node('game-region'), game.position[1] >= SOUTH_PASS.bounds.y ? SOUTH_PASS.name : '柳湾');
+    const inSouthPass = game.position[1] >= SOUTH_PASS.bounds.y;
+    showText(node('game-region'), inSouthPass ? SOUTH_PASS.name : '柳湾');
+    showText(node('game-forecast'), (inSouthPass ? '柳湾 · ' : '') + WEATHER_LABELS[liuwanWeather(game.day)] + ' · 预报');
     const minute = Math.floor(game.minute);
     if (minute !== renderedMinute) {
       renderedMinute = minute;
@@ -573,7 +581,8 @@ export async function createControls(scene: Scene) {
   function renderPanel() {
     if (!panel) return;
     const mapTitle = game.position[1] >= SOUTH_PASS.bounds.y ? SOUTH_PASS.name + '地图' : '柳湾地图';
-    const titles = { bag: '背包', warehouse: '仓库', ledger: '物志', map: mapTitle, saves: '存档', archive: '田记所账面', ...STATIONS };
+    const titles = { bag: '背包', warehouse: '仓库', ledger: '物志', map: mapTitle, saves: '存档',
+      archive: '田记所账面', forecast: '柳湾天气预报', ...STATIONS };
     node('sheet-title').textContent = titles[panel];
     const update = (text: string) => {
       renderPanel();
@@ -589,6 +598,8 @@ export async function createControls(scene: Scene) {
       body.replaceChildren(ledgerPanel(game, selectedEntry, id => { selectedEntry = id; renderPanel(); }));
     } else if (panel === 'map') {
       body.replaceChildren(...mapPanel(world, game, ripples));
+    } else if (panel === 'forecast') {
+      body.replaceChildren(...forecastPanel(game));
     } else if (panel === 'bag' || panel === 'warehouse') {
       const scroll = sheet.scrollTop;
       const warehouse = panel === 'warehouse' ? { page: warehousePage, turn: turnWarehousePage } : null;
@@ -925,6 +936,7 @@ export async function createControls(scene: Scene) {
   for (const name of ['bag', 'ledger', 'map', 'saves'] as const) {
     node('game-' + name).addEventListener('click', () => openPanel(name));
   }
+  node('game-forecast').addEventListener('click', () => openPanel('forecast'));
   node('sheet-close').addEventListener('click', closePanel);
   sheet.addEventListener('cancel', event => { event.preventDefault(); closePanel(); });
   review.addEventListener('cancel', event => event.preventDefault());
@@ -940,7 +952,9 @@ export async function createControls(scene: Scene) {
         dawnCurtain.hidden = false;
         restore(next);
         canvas.focus({ preventScroll: true });
-        report('新的一天开始了。');
+        const weather = liuwanWeather(next.day);
+        report(weather === 'rain' ? '柳湾下起春雨，雨水会浇透菜畦。' :
+          weather === 'haze' && mustardTraceVisible(next) ? '柳湾起了霾。去旧制盐台西侧找找余绪。' : '新的一天开始了。');
       } else {
         node('review-body').append(element('p', '保存失败，请重新确认次日。'));
       }
