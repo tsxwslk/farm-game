@@ -1,8 +1,8 @@
 import * as z from 'zod';
-import { BAG_SLOTS, ENTRIES, HOTBAR_COLUMNS, ITEMS, RECIPES, RESOURCES, STARTING_TOOLS, STATIONS, TILL_HITS, TOOLS, TRADE, WAREHOUSE_SLOTS, WATER_CAPACITY } from './content';
+import { BAG_SLOTS, ENTRIES, HOTBAR_COLUMNS, ITEMS, RECIPES, RESOURCES, STARTING_TOOLS, STATIONS, TILL_HITS, TOOLS, TRADE, WAREHOUSE_SLOTS, WATER_CAPACITY, type Tool } from './content';
 import { DAY, SAVE_VERSION, type Game } from './game';
 import { equippedTool, startingInventory } from './inventory';
-import type { World } from './scene';
+import type { Plot, World } from './scene';
 
 const whole = z.int().nonnegative();
 const minute = z.number().nonnegative();
@@ -89,7 +89,7 @@ const migrations: Partial<Record<number, (save: unknown, world: World) => unknow
       ...parsed.data,
       game: {
         ...game, schemaVersion: 3,
-        plots: world.plots.map(({ id }) => game.plots[id] ?? { tilled: false, planted: null, watered: null }),
+        plots: world.legacyPlots.map(({ id }) => game.plots[id] ?? { tilled: false, planted: null, watered: null }),
         action: game.action?.key.startsWith('plot-') ? game.action : null,
       },
     };
@@ -112,6 +112,35 @@ const migrations: Partial<Record<number, (save: unknown, world: World) => unknow
       },
     };
   },
+  4(value, world) {
+    const parsed = saveSchema.extend({ game: gameSchema.extend({ schemaVersion: z.literal(4) }) }).safeParse(value);
+    if (!parsed.success || parsed.data.game.plots.length !== world.legacyPlots.length) throw new Error('旧存档格式有误。');
+    const { game } = parsed.data;
+    const plots: Plot[] = world.plots.map(() => ({ tilled: false, planted: null, watered: null }));
+    const migratedKeys = new Map<string, string>();
+    for (const old of world.legacyPlots) {
+      const x = old.x / 32, y = old.y / 32;
+      const tileIds = [0, 1, world.cols, world.cols + 1]
+        .map(offset => world.plotIds[y * world.cols + x + offset]).filter(id => id >= 0);
+      const previous = game.plots[old.id];
+      const cropId = tileIds.at(-1)!;
+      if (previous.tilled) {
+        for (const id of tileIds) plots[id].tilled = true;
+        plots[cropId] = previous;
+      }
+      const standing = world.plotIds[game.position[1] * world.cols + game.position[0]];
+      migratedKeys.set('plot-' + old.id, 'plot-' + (tileIds.includes(standing) ? standing : cropId));
+    }
+    const migrateKey = (key: string) => migratedKeys.get(key) ?? key;
+    return {
+      ...parsed.data,
+      game: {
+        ...game, schemaVersion: 5, plots,
+        strikes: Object.fromEntries(Object.entries(game.strikes).map(([key, count]) => [migrateKey(key), count])),
+        action: game.action && { ...game.action, key: migrateKey(game.action.key) },
+      },
+    };
+  },
 };
 
 export function validateSave(value: unknown, world: World): Save {
@@ -129,10 +158,16 @@ export function validateSave(value: unknown, world: World): Save {
   const { game } = parsed.data;
   const inBounds = ([x, y]: Game['position']) =>
     x < world.cols && y < world.rows && world.cells[y * world.cols + x] !== 'water';
-  const hitsFor = (key: string) => {
-    if (Object.hasOwn(RESOURCES, key)) return RESOURCES[key].hits;
+  const hitsFor = (key: string, tool?: Tool) => {
+    if (Object.hasOwn(RESOURCES, key)) {
+      const resource = RESOURCES[key];
+      return !tool || resource.tool === tool ? resource.hits : 0;
+    }
     const plot = /^plot-(\d+)$/.exec(key);
-    return plot && game.plots[Number(plot[1])] && !game.plots[Number(plot[1])].tilled ? TILL_HITS : 0;
+    const state = plot && game.plots[Number(plot[1])];
+    if (!state) return 0;
+    if (tool === 'pick') return state.tilled && state.planted === null ? 1 : 0;
+    return (!tool || tool === 'hoe') && !state.tilled ? TILL_HITS : 0;
   };
   const end = game.day * DAY;
   const toolIds = [...game.bag, ...game.warehouse].flatMap(slot => slot?.kind === 'tool' ? [slot.id] : []);
@@ -144,7 +179,7 @@ export function validateSave(value: unknown, world: World): Save {
       toolIds.length !== STARTING_TOOLS.length || new Set(toolIds).size !== STARTING_TOOLS.length ||
       Object.entries(game.depleted).some(([id, day]) => !Object.hasOwn(RESOURCES, id) || day > game.day) ||
       Object.entries(game.strikes).some(([key, hits]) => hits >= hitsFor(key) || game.depleted[key]) ||
-      (game.action && (!hitsFor(game.action.key) || game.action.at <= game.minute || game.action.tool !== equippedTool(game))) ||
+      (game.action && (!hitsFor(game.action.key, game.action.tool) || game.action.at <= game.minute || game.action.tool !== equippedTool(game))) ||
       game.plots.some(plot => (plot.planted !== null && (!plot.tilled || plot.planted > game.minute)) ||
         (plot.watered !== null && (plot.planted === null || plot.watered < plot.planted || plot.watered > game.minute))) ||
       Object.entries(game.jobs).some(([id, job]) =>

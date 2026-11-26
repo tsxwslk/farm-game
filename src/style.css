@@ -25,6 +25,42 @@
 .right-dock { align-items: center; }
 .dock #game-action { background: var(--gold); color: #352e20; }
 .message { bottom: calc(var(--bottom) + 92px); }
+.fishing-game {
+  position: absolute;
+  z-index: 2;
+  left: 50%;
+  top: 12%;
+  transform: translateX(-50%);
+  width: min(320px, calc(100% - 32px));
+  padding: 12px 14px;
+  display: grid;
+  gap: 8px;
+}
+.fishing-heading { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; }
+#fishing-score { color: var(--gold); font-variant-numeric: tabular-nums; }
+.fishing-instruction { font-size: 12px; }
+.fishing-track {
+  position: relative;
+  height: 18px;
+  margin-inline: 3px;
+  background: #584b36;
+  border-radius: 3px;
+}
+#fishing-zone, #fishing-marker { position: absolute; inset-block: 0; }
+#fishing-zone { background: #9dbb76; border-radius: 2px; }
+#fishing-marker { width: 4px; transform: translateX(-50%); background: #fff6d6; border: 1px solid #3a3125; }
+#fishing-time { width: 100%; height: 5px; accent-color: var(--gold); }
+#fishing-reel {
+  min-height: 44px;
+  border: 1px solid var(--seam);
+  border-radius: 4px;
+  color: #302d23;
+  background: var(--gold);
+  cursor: pointer;
+}
+@media (max-height: 420px) {
+  .fishing-game { top: 8px; padding: 8px 10px; gap: 4px; }
+}
 .direction-pad { touch-action: none; }
 .direction-pad button { min-width: 40px; font-size: 18px; }
 .hotbar {
@@ -114,6 +150,13 @@
   animation: unfold 140ms ease-out;
 }
 .paper-sheet::backdrop { background: #1e2a1e96; }
+.day-review::backdrop { background: #000; }
+#dawn-curtain {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  background: #000;
+}
 .paper-heading {
   display: flex;
   justify-content: space-between;
@@ -164,7 +207,59 @@
 .paper-sheet .inventory-slot.slot-equipped:not([aria-pressed="true"]) {
   box-shadow: inset 0 0 0 1px #758b5c;
 }
-.inventory-details:not(:empty) { min-height: 40px; padding: 6px 5px 0; }
+.inventory-layout {
+  display: flex;
+  flex-direction: column;
+}
+.item-card {
+  order: -1;
+  margin-block-end: 12px;
+  padding: 12px;
+  color: #372e20;
+  background: linear-gradient(145deg, #fffaeb, #eee1c6);
+  border: 1px solid #c6b18a;
+  border-radius: 7px;
+  box-shadow: 0 3px 0 #cab48b60;
+  overflow-wrap: anywhere;
+}
+.item-card[popover] {
+  position: fixed;
+  inset: auto;
+  width: min(248px, calc(100vw - 20px));
+  margin: 0;
+  box-shadow: 0 3px 0 #9d855a80, 0 8px 22px #2e261c55;
+}
+.hotbar-item-card { pointer-events: none; }
+.item-card h3 { margin: 0; font: 700 19px/1.22 var(--reading); }
+.item-card-heading { display: flex; align-items: center; gap: 9px; }
+.item-card-icon, .inventory-drag-ghost {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  border: 1px solid #c8b48b;
+  border-radius: 5px;
+  background: #e3d5b5;
+}
+.item-card-icon :is(img, canvas), .inventory-drag-ghost :is(img, canvas) {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+.item-card-meta { margin-bottom: 2px; color: #5e6845; font-size: 12px; font-variant-numeric: tabular-nums; }
+.item-card-description { margin-block: 8px 0; color: #534939; font-size: 13px; }
+.item-card .sheet-actions { margin-top: 9px; }
+.inventory-grid .inventory-slot[draggable="true"] { touch-action: none; -webkit-touch-callout: none; }
+.paper-sheet .inventory-slot.slot-drop { outline: 2px solid #476943; outline-offset: -2px; background: #d1d9ad; }
+.inventory-drag-ghost {
+  position: fixed;
+  z-index: 3;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  opacity: .88;
+}
 #sheet-body, #review-body { padding: 13px 22px 20px; }
 #sheet-status { padding: 0 22px 14px; color: var(--action-ink); }
 .sheet-actions { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; }

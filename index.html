@@ -24,6 +24,20 @@
       <p id="depth-status" class="hud" role="status">正在加载柳湾…</p>
     </div>
 
+    <section id="fishing-game" class="hud fishing-game" aria-label="收线小游戏" hidden>
+      <div class="fishing-heading">
+        <strong>鱼咬钩了</strong>
+        <span id="fishing-score"></span>
+      </div>
+      <p class="fishing-instruction">标记进入绿区时收线。</p>
+      <div class="fishing-track" aria-hidden="true">
+        <span id="fishing-zone"></span>
+        <span id="fishing-marker"></span>
+      </div>
+      <progress id="fishing-time" aria-label="剩余收线时间"></progress>
+      <button id="fishing-reel" type="button">收线 <kbd>F</kbd></button>
+    </section>
+
     <div class="left-dock">
       <div class="dock" role="group" aria-label="随身菜单">
         <button type="button" id="game-bag">背包 <kbd>B</kbd></button>
@@ -66,6 +80,8 @@
       <div id="sheet-body"></div>
       <p id="sheet-status" role="status" hidden></p>
     </dialog>
+
+    <div id="dawn-curtain" aria-hidden="true" hidden></div>
 
     <dialog id="game-review" class="paper-sheet day-review" aria-labelledby="review-title">
       <header class="paper-heading"><h2 id="review-title">午夜日结</h2></header>

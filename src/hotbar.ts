@@ -35,7 +35,7 @@ const pixels: Partial<Record<Tool | Item, Pixel[]>> = {
   fishSoup: [[wood, 2, 8, 12, 4], ['#dc9e5f', 3, 7, 10, 3], ['#ede1b2', 4, 8, 8, 2], ['#b68251', 4, 12, 8, 2]],
 };
 
-function icon(stack: Stack) {
+export function stackIcon(stack: Stack) {
   const file = iconFiles[stack.id];
   const url = file && assetUrl(file);
   if (url) {
@@ -84,11 +84,10 @@ function slotButton(address: SlotAddress, select: (address: SlotAddress) => void
     const stack = game[storage][index];
     const id = stack?.id ?? null;
     if (id !== previous) {
-      picture.replaceChildren(...(stack ? [icon(stack)] : []));
+      picture.replaceChildren(...(stack ? [stackIcon(stack)] : []));
       previous = id;
     }
     const label = stack ? describeSlot(game, stack) : '空格';
-    control.title = label;
     control.setAttribute('aria-label', '第 ' + (shortcut ? index % HOTBAR_COLUMNS + 1 : index + 1) + ' 格 · ' + label);
     control.setAttribute('aria-pressed', String(selection?.storage === storage && selection.index === index));
     control.classList.toggle('slot-equipped', storage === 'bag' && game.equippedSlot === index);

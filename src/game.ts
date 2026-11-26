@@ -7,7 +7,7 @@ import { batchesFor, consume, count, equippedStack, equippedTool, hasRoom, recei
 
 export const DAY = 1080;
 export const START: Point = [11, 6];
-export const SAVE_VERSION = 4;
+export const SAVE_VERSION = 5;
 export interface Entry {
   lit: boolean;
   deadline: number | null;
@@ -174,7 +174,12 @@ export function targetAction(game: Game, target: Target): { label: string; tool?
       };
     }
     case 'plot': {
-      const stage = window.LiuwanGame.cropStage(game, game.plots[Number(target.id)]);
+      const plot = game.plots[Number(target.id)];
+      if (plot.tilled && equippedTool(game) === 'pick') {
+        return plot.planted === null ? { tool: 'pick', label: '恢复草地', hits: 1 } :
+          { tool: 'pick', label: '收获后可恢复草地' };
+      }
+      const stage = window.LiuwanGame.cropStage(game, plot);
       if (stage === 'ground') return { tool: 'hoe' as const, label: '翻地', hits: TILL_HITS };
       if (stage === 'tilled') return { label: '播种' };
       if (stage === 'seed') return { tool: 'can' as const, label: '浇水' };
@@ -207,6 +212,7 @@ export function operate(
   const { tool, label, hits } = targetAction(game, target);
   if (game.review) return '请先确认日结。';
   if (tool && equippedTool(game) !== tool) return '需要' + TOOLS[tool].name + '。';
+  if (target.kind === 'plot' && tool === 'pick' && !hits) return '这块地还有作物，收获后可恢复草地。';
   if (hits && tool) {
     if (target.kind === 'plot' && !isClear(target)) return '先清理这块地上的树石或设施。';
     const key = targetKey(target);
@@ -221,7 +227,12 @@ export function operate(
     }
     if (target.kind === 'plot') {
       delete game.strikes[key];
-      game.plots[Number(target.id)].tilled = true;
+      const plot = game.plots[Number(target.id)];
+      if (tool === 'pick') {
+        plot.tilled = false;
+        return record(game, '已将空耕地恢复成草地。');
+      }
+      plot.tilled = true;
       return record(game, '翻好一块地。可从背包选种播下。');
     }
     const { item, quantity } = RESOURCES[key];
@@ -327,12 +338,14 @@ export function nextDay(game: Game, reviewDay: number) {
   return true;
 }
 
-export function renewResources(game: Game) {
+export function renewResources(game: Game, world: World) {
   let changed = false;
   for (const [id, day] of Object.entries(game.depleted)) {
     const resource = RESOURCES[id];
     if (!resource.renews || day >= game.day) continue;
-    if (resource.actor !== 'clay' && resource.tile.every((value, index) => value === game.position[index])) continue;
+    const [x, y] = resource.tile;
+    if (resource.actor !== 'clay' && (game.position[0] === x && game.position[1] === y ||
+      game.plots[world.plotIds[y * world.cols + x]]?.tilled || game.strikes['plot-' + world.plotIds[y * world.cols + x]])) continue;
     delete game.depleted[id];
     changed = true;
   }

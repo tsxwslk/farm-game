@@ -11,9 +11,10 @@ export interface World {
   cols: number;
   rows: number;
   cells: string[];
-  plots: { id: number; x: number; y: number }[];
+  plots: { id: number; x: number; y: number; size: number }[];
+  legacyPlots: World['plots'];
+  plotIds: number[];
   landmarks: { id: string; label: string; tile: Point; mark: string }[];
-  fishing: { water: Point; bank: Point };
 }
 
 export interface Target {
@@ -21,7 +22,13 @@ export interface Target {
   id?: string | number;
   label?: string;
   tile?: Point;
+  footprint?: Point[];
   points: Point[];
+}
+
+export interface FishingSpot extends Target {
+  kind: 'fishing';
+  tile: Point;
 }
 
 export interface Placement {
@@ -36,7 +43,8 @@ export interface Motion {
   facing: Point;
   progress: { done: number; total: number } | null;
   hit: { tool: 'hoe' | 'pick' | 'axe' | 'can'; point: Point; minute: number } | null;
-  fishing: { biting: boolean } | null;
+  fishing: { tile: Point; hooked: boolean } | null;
+  ripples: Point[];
   packing: { kind: Station; progress: number } | null;
 }
 
@@ -46,6 +54,8 @@ export interface Scene {
   view: { x: number; y: number; left: number; top: number; width: number; height: number };
   zoom: { level: number; scales: number[] };
   targets: Target[];
+  plotTargets: Target[];
+  fishingSpots: FishingSpot[];
   blocked: Set<number>;
   draw(game: Game, position: Point, hovered: Target | null, placement: Placement | null, motion: Motion): void;
   pick(x: number, y: number, tool?: Tool): Target | undefined;

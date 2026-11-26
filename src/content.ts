@@ -25,6 +25,26 @@ export const TOOLS = {
 } as const;
 export type Tool = keyof typeof TOOLS;
 
+export const INVENTORY_INFO = {
+  hoe: ['农具', '在空闲草地开垦菜畦，也能挖取河岸的黏土。'],
+  pick: ['农具', '敲碎石块采集石材和岩盐，也能把空耕地恢复成草地。'],
+  can: ['农具', '从河边装水，给播好的菜畦浇水。'],
+  rod: ['农具', '在河岸抛竿。水面泛起涟漪的地方更容易咬钩。'],
+  axe: ['农具', '砍柳树、橡树或清理树桩，取得木材。'],
+  seeds: ['种子', '播在翻好的菜畦里，浇水后开始发芽。'],
+  radish: ['作物', '可以留种、卖给田记所，或和粗盐一起腌制。'],
+  rockSalt: ['矿物', '带灰白纹的盐矿，在盐灶制成粗盐。'],
+  salt: ['加工材料', '由岩盐制成，用来腌制樱桃萝卜。'],
+  pickle: ['加工品', '用粗盐腌成的樱桃萝卜，可卖给田记所。'],
+  wood: ['建材', '从树木和树桩取得，用于搭建盐灶和烧制腌菜缸。'],
+  stone: ['建材', '从普通岩石取得，可用来搭建盐灶。'],
+  clay: ['建材', '河岸挖出的细土，可在盐灶烧制成腌菜缸。'],
+  crock: ['设施', '摆在可达的空地上，可用粗盐腌制樱桃萝卜。'],
+  kiln: ['设施', '摆在可达的空地上，可制盐、烧缸和炖鱼汤。'],
+  crucian: ['鱼获', '从柳湾河钓得，可用盐灶炖汤。'],
+  fishSoup: ['加工品', '在盐灶炖成的鲫鱼汤，记录了鲫鱼的一种用法。'],
+} as const satisfies Record<Item | Tool, readonly [string, string]>;
+
 export const HOTBAR_COLUMNS = 8;
 export const BAG_SLOTS = 16;
 export const WAREHOUSE_SLOTS = 24;
@@ -68,7 +88,7 @@ export const ENTRIES = {
   },
   crucian: {
     section: '水族册', reward: 35, duration: 480,
-    clue: '带钓竿去柳湾南边的回水湾，在涟漪旁抛竿。',
+    clue: '带钓竿去柳湾河岸抛竿。水面出现涟漪的地方更容易咬钩。',
     use: '把钓到的鲫鱼放进盐灶炖汤。',
   },
   pickle: {

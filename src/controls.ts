@@ -6,30 +6,44 @@ import {
   type Game,
 } from './game';
 import { createHotbar } from './hotbar';
+import {
+  castOutcome, MAX_CAST_TIME, REEL_HITS, REEL_MISSES, REEL_TIME, REEL_ZONES, reelPosition, RIPPLE_INTERVAL, rippleSpots, sameTile,
+} from './fishing';
 import { equipSlot, equippedStack, equippedTool, moveStack, type SlotAddress } from './inventory';
-import { TradingBook, element, inventoryPanel, ledgerPanel, mapPanel, node, stationPanel } from './panels';
+import { bindHotbarItemCard, TradingBook, element, inventoryPanel, ledgerPanel, mapPanel, node, stationPanel } from './panels';
 import { createSaveControls } from './save-controls';
 import type { Motion, Placement, Scene, Target } from './scene';
 
 const TILE = 32;
 const WALK_SPEED = 6;
 const PACK_HOLD_MS = 550;
+const SLOT_WHEEL_THRESHOLD = 32;
+const SLOT_WHEEL_PAUSE_MS = 95;
+const SLOT_WHEEL_NOTCH_MS = 28;
 const MOVES: Record<string, Point> = { w: [0, -1], a: [-1, 0], s: [0, 1], d: [1, 0] };
 type Panel = 'bag' | 'warehouse' | 'ledger' | 'map' | 'saves' | 'archive' | Station;
 
 export async function createControls(scene: Scene) {
-  const { world, canvas, view, zoom, targets, blocked, draw, pick, setStations, canPlace } = scene;
+  const { world, canvas, view, zoom, targets, plotTargets, fishingSpots, blocked, draw, pick, setStations, canPlace } = scene;
   const river = targets.find(target => target.kind === 'water');
-  const fishingSpot = targets.find(target => target.kind === 'fishing');
   const { passable, routeTo } = window.LiuwanGame;
   const coarsePointer = matchMedia('(pointer: coarse)');
   const sheet = node<HTMLDialogElement>('game-sheet');
   const review = node<HTMLDialogElement>('game-review');
+  const dawnCurtain = node('dawn-curtain');
+  const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
   const body = node('sheet-body');
   const message = node('depth-status');
   const sheetMessage = node('sheet-status');
   const actionButton = node<HTMLButtonElement>('game-action');
   const nextButton = node<HTMLButtonElement>('next-day');
+  const fishingGame = node('fishing-game');
+  const fishingScore = node('fishing-score');
+  const fishingZone = node('fishing-zone');
+  const fishingMarker = node('fishing-marker');
+  const fishingTime = node<HTMLProgressElement>('fishing-time');
+  const fishingReel = node<HTMLButtonElement>('fishing-reel');
+  fishingTime.max = REEL_TIME;
   const tradingBook = new TradingBook();
   const keys = new Set<string>();
   let game = newGame(world);
@@ -43,7 +57,9 @@ export async function createControls(scene: Scene) {
   let hovered: Target | null = null;
   let placement: Placement | null = null;
   let hit: Motion['hit'] = null;
-  let fishing: { bite: number; until: number } | null = null;
+  let fishing: { tile: Point; at: number; bites: boolean; reel: { started: number; hits: number; misses: number; last: number } | null } | null = null;
+  let ripples: Point[] = [];
+  let rippleInterval = -1;
   let hold: { kind: Station; pointerId: number; x: number; y: number; started: number; timer: number } | null = null;
   let packedByHold = false;
   let panel: Panel | null = null;
@@ -51,6 +67,7 @@ export async function createControls(scene: Scene) {
   let selectedEntry: EntryId = 'radish';
   let renderedMinute = -1;
   let savedReviewDay = 0;
+  let dawnFade: Animation | null = null;
   let messageExpires = 0;
 
   const renderHotbar = createHotbar(index => {
@@ -59,6 +76,7 @@ export async function createControls(scene: Scene) {
       canvas.focus({ preventScroll: true });
     }
   });
+  const hotbarCard = bindHotbarItemCard(node('hotbar'), () => game);
   const saves = createSaveControls(scene, body, () => game, restore, () => panel === 'saves',
     text => report(text, sheet.open ? sheetMessage : message));
   game = await saves.load();
@@ -73,6 +91,7 @@ export async function createControls(scene: Scene) {
     selected = hovered = placement = null;
     hit = null;
     setStations(game);
+    rippleInterval = -1;
     renderedMinute = -1;
     previous = performance.now();
     savedReviewDay = game.review ? game.day : 0;
@@ -93,7 +112,7 @@ export async function createControls(scene: Scene) {
     route = [];
     step = null;
     pendingTarget = null;
-    fishing = null;
+    endFishing();
   }
 
   function isNear(target: Target) {
@@ -101,22 +120,35 @@ export async function createControls(scene: Scene) {
   }
 
   function activeTarget() {
-    if (fishing && fishingSpot) return fishingSpot;
-    if (selected && isNear(selected)) return selected;
-    if (hovered && isNear(hovered)) return hovered;
-
     const tool = equippedTool(game);
+    const matchesTool = (target: Target) => target.kind === 'fishing' ? tool === 'rod' : target.kind !== 'water' || tool !== 'rod';
+    if (selected && isNear(selected) && matchesTool(selected)) return selected;
+    if (hovered && isNear(hovered) && matchesTool(hovered)) return hovered;
+    if (tool === 'rod') {
+      const spots = fishingSpots.filter(isNear);
+      const spot = spots.find(candidate => isRipple(candidate.tile)) ?? spots[0];
+      if (spot) return spot;
+    }
     const nearby = targets.filter(target => isNear(target) &&
       (target.kind !== 'resource' || !game.depleted[targetKey(target)]));
     const facilities = nearby.filter(target =>
       target.kind === 'archive' || target.kind === 'chest' || target.kind === 'kiln' || target.kind === 'jar');
     const [x, y] = game.position;
-    return facilities.find(target => target.tile?.[0] === x + facing[0] && target.tile[1] === y + facing[1]) ??
-      nearby.find(target => tool && targetAction(game, target).tool === tool) ?? facilities[0] ?? nearby[0];
+    const ahead: Point = [x + facing[0], y + facing[1]];
+    const farmTargets = [game.position, ahead].flatMap(([col, row]) => {
+      if (!passable(world, blocked, col, row)) return [];
+      const id = world.plotIds[row * world.cols + col];
+      return id >= 0 && (tool === 'hoe' || game.plots[id].tilled) ? [plotTargets[id]] : [];
+    });
+    return facilities.find(target => (target.tile && sameTile(target.tile, ahead)) ||
+      target.footprint?.some(tile => sameTile(tile, ahead))) ??
+      nearby.find(target => tool && targetAction(game, target).tool === tool) ??
+      farmTargets.find(target => tool && targetAction(game, target).tool === tool) ??
+      facilities[0] ?? farmTargets[0] ?? nearby[0];
   }
 
   function clearPlot(target: Target) {
-    return target.points.every(([x, y]) => !blocked.has(y * world.cols + x));
+    return target.tile !== undefined && passable(world, blocked, ...target.tile);
   }
 
   function gameAction() {
@@ -127,38 +159,96 @@ export async function createControls(scene: Scene) {
       report('已取消摆放。');
       return;
     }
-    interact(activeTarget());
+    if (fishing?.reel) reelFish();
+    else if (fishing) endFishing('收起了钓线。');
+    else interact(activeTarget());
   }
 
-  function useFishing() {
+  function isRipple(tile: Point) {
+    return ripples.some(point => sameTile(point, tile));
+  }
+
+  function refreshRipples() {
+    const interval = Math.floor(game.minute / RIPPLE_INTERVAL);
+    if (interval === rippleInterval) return;
+    rippleInterval = interval;
+    ripples = rippleSpots(fishingSpots, world.rows, interval,
+      spot => spot.points.some(point => passable(world, blocked, ...point))).map(spot => spot.tile);
+    if (panel === 'map') renderPanel();
+  }
+
+  function endFishing(message?: string) {
+    if (!fishing) return;
+    fishing = null;
+    fishingGame.hidden = true;
+    if (document.activeElement === fishingReel) canvas.focus({ preventScroll: true });
+    if (message) report(message);
+  }
+
+  function useFishing(tile: Point) {
     if (equippedTool(game) !== 'rod') return report('先在快捷栏选中钓竿。');
-    if (fishing) {
-      if (game.minute < fishing.bite) {
-        fishing = null;
-        report('收起了钓线。');
-      } else if (game.minute < fishing.until) {
-        fishing = null;
-        report(catchFish(game));
-        void saves.save();
-      } else {
-        fishing = null;
-        report('鲫鱼脱钩了，可以重新抛竿。');
-      }
-      return;
-    }
-    if (game.day * window.LiuwanGame.DAY - game.minute < 9) return report('快到午夜了，明天再来抛竿。');
+    if (game.day * window.LiuwanGame.DAY - game.minute < MAX_CAST_TIME) return report('快到午夜了，明天再来抛竿。');
     stopMovement();
     game.action = null;
-    facing = [1, 0];
-    const bite = game.minute + 4 + Math.floor(game.minute) % 3;
-    fishing = { bite, until: bite + 2.5 };
-    report('等浮标有动静，再按 F 或点浮标收线。');
+    facing = [tile[0] - game.position[0], tile[1] - game.position[1]];
+    refreshRipples();
+    const ripple = isRipple(tile);
+    fishing = { tile, ...castOutcome(game.minute, ripple), reel: null };
+    report(ripple ? '已在涟漪处抛竿，这里更容易咬钩。' : '已抛竿，等鱼儿咬钩。');
+  }
+
+  function updateFishing() {
+    if (!fishing || game.minute < fishing.at) return;
+    if (!fishing.bites) {
+      endFishing('这次没有鱼咬钩，可以再抛一竿。');
+      return;
+    }
+    if (game.minute >= fishing.at + REEL_TIME) {
+      endFishing('鲫鱼脱钩了，可以重新抛竿。');
+      return;
+    }
+    if (!fishing.reel) {
+      fishing.reel = { started: fishing.at, hits: 0, misses: 0, last: -Infinity };
+      fishingGame.hidden = false;
+      report('');
+    }
+    const { started, hits, misses } = fishing.reel;
+    const elapsed = game.minute - started;
+    const zone = REEL_ZONES[hits];
+    fishingZone.style.left = zone.left * 100 + '%';
+    fishingZone.style.width = (zone.right - zone.left) * 100 + '%';
+    fishingMarker.style.left = reelPosition(elapsed) * 100 + '%';
+    const timeLeft = REEL_TIME - elapsed;
+    fishingTime.value = timeLeft;
+    showText(fishingScore, hits + '/' + REEL_HITS + ' 次 · 还可失误 ' + (REEL_MISSES - 1 - misses) + ' 次');
+  }
+
+  function reelFish() {
+    const reel = fishing?.reel;
+    if (!reel || saves.busy || game.review || !document.hasFocus() || game.minute - reel.last < .3) return;
+    reel.last = game.minute;
+    const position = reelPosition(game.minute - reel.started);
+    const zone = REEL_ZONES[reel.hits];
+    if (position >= zone.left && position <= zone.right) {
+      reel.hits++;
+      if (reel.hits === REEL_HITS) {
+        endFishing(catchFish(game));
+        void saves.save();
+        return;
+      }
+      report('收线成功。');
+    } else {
+      reel.misses++;
+      if (reel.misses === REEL_MISSES) return endFishing('鲫鱼脱钩了，可以重新抛竿。');
+      report('时机错了，等标记回到绿区。');
+    }
+    updateFishing();
   }
 
   function impactPoint(target: Target): Point {
     if (target.kind === 'plot') {
       const plot = world.plots[Number(target.id)];
-      return [plot.x + TILE, plot.y + TILE];
+      return [plot.x + plot.size / 2, plot.y + plot.size / 2];
     }
     if (target.kind === 'water') {
       const [x, y] = game.position;
@@ -176,8 +266,8 @@ export async function createControls(scene: Scene) {
       return;
     }
     if (!isNear(target) || game.action?.key === targetKey(target)) return;
-    if (target.kind === 'fishing') {
-      useFishing();
+    if (target.kind === 'fishing' && target.tile) {
+      useFishing(target.tile);
       return;
     }
     stopMovement();
@@ -212,10 +302,12 @@ export async function createControls(scene: Scene) {
   function applyTime(amount: number) {
     let landed = false;
     const notes = advance(game, amount, action => {
-      const target = targets.find(candidate => targetKey(candidate) === action.key);
+      const target = action.key.startsWith('plot-') ? plotTargets[Number(action.key.slice(5))] :
+        targets.find(candidate => targetKey(candidate) === action.key);
       if (!target || !isNear(target) || equippedTool(game) !== action.tool) return;
       const result = operate(game, target, clearPlot, true);
-      landed = !result || (target.kind === 'plot' && game.plots[Number(target.id)].tilled) || Boolean(game.depleted[action.key]);
+      landed = !result || (target.kind === 'plot' && (action.tool === 'pick'
+        ? !game.plots[Number(target.id)].tilled : game.plots[Number(target.id)].tilled)) || Boolean(game.depleted[action.key]);
       if ((action.tool === 'hoe' || action.tool === 'pick' || action.tool === 'axe') &&
         landed) {
         hit = { tool: action.tool, point: impactPoint(target), minute: game.minute };
@@ -234,10 +326,7 @@ export async function createControls(scene: Scene) {
         report(notes.at(-1)!, sheetMessage);
       } else report(notes.at(-1)!);
     }
-    if (fishing && game.minute >= fishing.until) {
-      fishing = null;
-      report('鲫鱼脱钩了，可以重新抛竿。');
-    }
+    if (!game.review) updateFishing();
     if (!game.review && (notes.length || landed)) void saves.save();
     if (game.review && savedReviewDay !== game.day) {
       savedReviewDay = game.day;
@@ -250,6 +339,7 @@ export async function createControls(scene: Scene) {
   }
 
   function showReview() {
+    hotbarCard.dismiss();
     node('review-title').textContent = '第 ' + game.day + ' 天 · 午夜日结';
     const { income, expenses, royalties } = game.account;
     const log = element('ul', undefined, 'sheet-list');
@@ -269,7 +359,7 @@ export async function createControls(scene: Scene) {
     }
     keys.clear();
     game.action = null;
-    fishing = null;
+    endFishing();
     const from = step?.to ?? game.position;
     let found = routeTo(world, blocked, from, destinations);
     if (!found && target?.kind === 'water' && river) {
@@ -294,7 +384,7 @@ export async function createControls(scene: Scene) {
         return;
       }
       game.action = null;
-      fishing = null;
+      endFishing();
       facing = [next[0] - game.position[0], next[1] - game.position[1]];
       step = { to: next, progress: 0 };
     }
@@ -302,7 +392,7 @@ export async function createControls(scene: Scene) {
     if (step.progress < 1) return;
     game.position = step.to;
     step = null;
-    if (renewResources(game)) setStations(game);
+    if (renewResources(game, world)) setStations(game);
     if (!route.length && pendingTarget) {
       const target = pendingTarget;
       pendingTarget = null;
@@ -329,12 +419,15 @@ export async function createControls(scene: Scene) {
     const suffix = (progress ? ' ' + progress.done + '/' + progress.total : '') +
       (target && isNear(target) ? ' · 点击 / F' : '');
     const growth = target?.kind === 'plot' && action?.label === '查看长势' ? growthStatus(game, game.plots[Number(target.id)]) : '';
-    const fishingHint = fishing ? (game.minute >= fishing.bite ? '咬钩了！按 F 或点浮标收线' : '等候咬钩 · F 收竿') : '';
+    const fishingHint = fishing?.reel ? '' : fishing ? '等候咬钩 · F 收竿' :
+      target?.kind === 'fishing' && target.tile && isRipple(target.tile) ? '涟漪钓点 · 更容易咬钩' + suffix : '';
     const placementHint = coarsePointer.matches ? '点空地预览，再点一次摆放' : '点击空地确认，Esc 取消';
-    showText(node('target-hint'), placement ? placementHint : fishingHint || growth || (action ? name + action.label + suffix : ''));
+    showText(node('target-hint'), placement ? placementHint :
+      fishing?.reel ? '' : fishingHint || growth || (action ? name + action.label + suffix : ''));
     if (!message.hidden && now > messageExpires) message.hidden = true;
     renderHotbar(game);
-    showButton(actionButton, placement ? '取消' : '操作', placement ? 'Esc' : 'F');
+    hotbarCard.update();
+    showButton(actionButton, placement ? '取消' : fishing?.reel ? '收线' : fishing ? '收竿' : '操作', placement ? 'Esc' : 'F');
     showText(node('game-coins'), game.coins + ' 文');
     const minute = Math.floor(game.minute);
     if (minute !== renderedMinute) {
@@ -372,7 +465,7 @@ export async function createControls(scene: Scene) {
   function frame(now: number) {
     const dt = Math.min(.25, Math.max(0, (now - previous) / 1000));
     previous = now;
-    if (!saves.busy && !document.hidden && document.hasFocus() && !game.review) {
+    if (!saves.busy && dawnCurtain.hidden && !document.hidden && document.hasFocus() && !game.review) {
       applyTime(dt);
       if (!game.review && !panel && !placement) move(dt);
     }
@@ -381,19 +474,39 @@ export async function createControls(scene: Scene) {
       game.position[1] + (step.to[1] - game.position[1]) * step.progress,
     ] : game.position;
     if (hit && game.minute - hit.minute >= .42) hit = null;
+    refreshRipples();
     const target = activeTarget() ?? hovered ?? selected;
     draw(game, position, target, placement, {
       step: step?.progress ?? null, facing, progress: target ? targetProgress(game, target) : null, hit,
-      fishing: fishing && { biting: game.minute >= fishing.bite },
+      fishing: fishing && { tile: fishing.tile, hooked: Boolean(fishing.reel) },
+      ripples,
       packing: hold && { kind: hold.kind, progress: Math.min(1, Math.max(0, (now - hold.started) / PACK_HOLD_MS)) },
     });
     updateJobPanel();
     updateHud(now);
+    if (!dawnCurtain.hidden && !dawnFade) revealDawn();
     if (!saves.busy && !game.review && !document.hidden && now - previousSave >= 180000) {
       previousSave = now;
       void saves.save();
     }
     requestAnimationFrame(frame);
+  }
+
+  function revealDawn() {
+    if (reducedMotion.matches) {
+      dawnCurtain.hidden = true;
+      return;
+    }
+    // Reveal only after the first frame of the new day has been drawn.
+    const fade = dawnCurtain.animate([{ opacity: 1 }, { opacity: 0 }],
+      { duration: 900, easing: 'ease-out', fill: 'both' });
+    dawnFade = fade;
+    const finish = () => {
+      dawnCurtain.hidden = true;
+      fade.cancel();
+      dawnFade = null;
+    };
+    void fade.finished.then(finish, finish);
   }
 
   function openPanel(name: Panel) {
@@ -404,6 +517,7 @@ export async function createControls(scene: Scene) {
     }
     if (placement?.slot !== undefined) selectSlot(null);
     placement = null;
+    hotbarCard.dismiss();
     stopMovement();
     panel = name;
     selectedStack = null;
@@ -437,14 +551,13 @@ export async function createControls(scene: Scene) {
     } else if (panel === 'ledger') {
       body.replaceChildren(ledgerPanel(game, selectedEntry, id => { selectedEntry = id; renderPanel(); }, assetUrl));
     } else if (panel === 'map') {
-      body.replaceChildren(...mapPanel(world, game));
+      body.replaceChildren(...mapPanel(world, game, ripples));
     } else if (panel === 'bag' || panel === 'warehouse') {
       const scroll = sheet.scrollTop;
-      body.replaceChildren(...inventoryPanel(game, panel === 'warehouse', selectedStack, selectStack, transferStack,
+      body.replaceChildren(...inventoryPanel(game, panel === 'warehouse', selectedStack, address => { selectedStack = address; }, transferStack,
         index => {
           selectSlot(index);
-          closePanel();
-          canvas.focus({ preventScroll: true });
+          if (placement) canvas.focus({ preventScroll: true });
         }, update, beginPlacement));
       sheet.scrollTop = scroll;
     } else if (panel === 'saves') {
@@ -462,22 +575,11 @@ export async function createControls(scene: Scene) {
       ?.focus({ preventScroll: true });
   }
 
-  function selectStack(address: SlotAddress) {
-    const from = selectedStack;
-    if (from && game[from.storage][from.index] && (from.index !== address.index || from.storage !== address.storage)) {
-      transferStack(from, address);
-      return;
-    }
-    selectedStack = !from && game[address.storage][address.index] ? address : null;
-    renderPanel();
-    focusStack(address);
-  }
-
   function transferStack(from: SlotAddress, to: SlotAddress) {
     if (saves.busy || (panel !== 'bag' && panel !== 'warehouse') ||
       (panel !== 'warehouse' && (from.storage !== 'bag' || to.storage !== 'bag'))) return;
     if (!moveStack(game, from, to)) return;
-    selectedStack = null;
+    selectedStack = to;
     renderHotbar(game);
     renderPanel();
     focusStack(to);
@@ -565,7 +667,7 @@ export async function createControls(scene: Scene) {
     if (!event.isPrimary || event.button !== 0) return;
     cancelHold();
     packedByHold = false;
-    if (placement || panel || game.review || saves.busy) return;
+    if (placement || panel || fishing?.reel || game.review || saves.busy) return;
     const point = worldPoint(event);
     const target = point && pick(...point, equippedTool(game));
     if (!target || (target.kind !== 'kiln' && target.kind !== 'jar') || !isNear(target)) return;
@@ -609,6 +711,11 @@ export async function createControls(scene: Scene) {
     const point = worldPoint(event);
     if (!point) return;
     const tile = tileAt(point);
+    if (fishing && sameTile(tile, fishing.tile)) {
+      gameAction();
+      return;
+    }
+    if (fishing?.reel) return;
     if (placement) {
       if (!placement.tile || tile[0] !== placement.tile[0] || tile[1] !== placement.tile[1]) {
         placement.tile = tile;
@@ -640,36 +747,62 @@ export async function createControls(scene: Scene) {
   let scroll = 0;
   let lastScroll = -Infinity;
   let lastZoomStep = -Infinity;
-  let slotDirection = 0;
+  let slotWheel = { direction: 0, distance: 0, peak: 0, lastEvent: -Infinity, stepped: false };
   let zoomGesture = false;
+
+  function scrollSlots(delta: number, mode: number, now: number) {
+    const direction = Math.sign(delta);
+    if (mode !== WheelEvent.DOM_DELTA_PIXEL) {
+      slotWheel.lastEvent = -Infinity;
+      cycleSlot(direction);
+      return;
+    }
+
+    const gap = now - slotWheel.lastEvent;
+    if (direction !== slotWheel.direction || gap > SLOT_WHEEL_PAUSE_MS) {
+      slotWheel = { direction, distance: 0, peak: 0, lastEvent: now, stepped: false };
+    }
+    slotWheel.lastEvent = now;
+    const distance = Math.abs(delta);
+    if (slotWheel.stepped) {
+      // Some browsers report mouse notches in pixels. Let a fresh impulse through
+      // without counting the smaller events at the end of the previous notch.
+      const notch = gap >= SLOT_WHEEL_NOTCH_MS &&
+        distance >= Math.max(SLOT_WHEEL_THRESHOLD, slotWheel.peak * .95);
+      if (notch) cycleSlot(direction);
+      slotWheel.peak = Math.max(slotWheel.peak, distance);
+      return;
+    }
+    slotWheel.peak = Math.max(slotWheel.peak, distance);
+    slotWheel.distance += distance;
+    if (slotWheel.distance < SLOT_WHEEL_THRESHOLD) return;
+    cycleSlot(direction);
+    slotWheel.stepped = true;
+  }
+
   function handleWheel(event: WheelEvent) {
     if (event.ctrlKey) return;
     event.preventDefault();
     const zooming = event.shiftKey || Boolean(placement);
     if (!zooming && !canSwitchSlots()) return;
-    const delta = (event.deltaY || event.deltaX) * (event.deltaMode === 1 ? 40 : event.deltaMode === 2 ? 100 : 1);
+    const mode = event.deltaMode;
+    const delta = event.deltaY || event.deltaX;
     if (!delta) return;
     const now = performance.now();
-    if (now - lastScroll > 160 || zooming !== zoomGesture) {
-      scroll = 0;
-      slotDirection = 0;
-    }
+    if (now - lastScroll > 160 || zooming !== zoomGesture) scroll = 0;
+    if (zooming !== zoomGesture) slotWheel.lastEvent = -Infinity;
     zoomGesture = zooming;
     lastScroll = now;
+    if (!zooming) {
+      scrollSlots(delta, mode, now);
+      return;
+    }
     const direction = Math.sign(delta);
     if (Math.sign(scroll) !== direction) scroll = 0;
-    // Ignore the rest of a same-direction burst after selecting a slot.
-    if (!zooming && direction === slotDirection) return;
-    scroll += delta;
-    if (zooming) {
-      if (Math.abs(scroll) < 65 || now - lastZoomStep < 115) return;
-      changeZoom(-direction);
-      lastZoomStep = now;
-    } else {
-      if (Math.abs(scroll) < 32) return;
-      cycleSlot(direction);
-      slotDirection = direction;
-    }
+    scroll += delta * (mode === 1 ? 40 : mode === 2 ? 100 : 1);
+    if (Math.abs(scroll) < 65 || now - lastZoomStep < 115) return;
+    changeZoom(-direction);
+    lastZoomStep = now;
     scroll = 0;
   }
   canvas.addEventListener('wheel', handleWheel, { passive: false });
@@ -687,6 +820,10 @@ export async function createControls(scene: Scene) {
     const target = event.target;
     if (event.ctrlKey || event.metaKey || event.altKey ||
         (target instanceof HTMLElement && target.closest('input, textarea, select'))) return;
+    if (!dawnCurtain.hidden) {
+      event.preventDefault();
+      return;
+    }
     const key = event.key.toLowerCase();
     const panels = { b: 'bag', j: 'ledger', m: 'map' } as const;
     if (!event.repeat && Object.hasOwn(panels, key)) {
@@ -709,7 +846,8 @@ export async function createControls(scene: Scene) {
       return;
     }
     if (key === 'escape') {
-      if (placement) gameAction();
+      if (fishing) endFishing('收起了钓线。');
+      else if (placement) gameAction();
       else selectSlot(null);
     } else if (key === 'f' && !event.repeat) {
       event.preventDefault();
@@ -745,6 +883,7 @@ export async function createControls(scene: Scene) {
     }
   }
   actionButton.addEventListener('click', gameAction);
+  fishingReel.addEventListener('click', reelFish);
   for (const name of ['bag', 'ledger', 'map', 'saves'] as const) {
     node('game-' + name).addEventListener('click', () => openPanel(name));
   }
@@ -756,11 +895,13 @@ export async function createControls(scene: Scene) {
     if (saves.busy || !game.review) return;
     const next = structuredClone(game);
     if (!nextDay(next, savedReviewDay)) return;
-    renewResources(next);
+    renewResources(next, world);
     nextButton.disabled = true;
     try {
       if (await saves.transition(next)) {
+        dawnCurtain.hidden = false;
         restore(next);
+        canvas.focus({ preventScroll: true });
         report('新的一天开始了。');
       } else {
         node('review-body').append(element('p', '保存失败，请重新确认次日。'));

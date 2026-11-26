@@ -1,14 +1,15 @@
 import {
-  ENTRIES, HOTBAR_COLUMNS, ITEMS, KILN_COST, RECIPES, RESOURCES, SEEDS_PER_RADISH, STATIONS, TRADE,
-  type EntryId, type RecipeId, type Station,
+  ENTRIES, HOTBAR_COLUMNS, INVENTORY_INFO, ITEMS, KILN_COST, RECIPES, RESOURCES, SEEDS_PER_RADISH, STATIONS, TRADE, WATER_CAPACITY,
+  type EntryId, type Point, type RecipeId, type Station,
 } from './content';
 import {
   canBuild, canSubmit, claimJob, claimSeed, costs, hasMaterials, jobMeter, needsSeed,
   saveSeed, startJob, submit, trade, tradeLimit, warnSale, type Game, type TradeItem,
 } from './game';
 import type { World } from './scene';
-import { describeSlot, makeSlotRow } from './hotbar';
-import { count, type SlotAddress, type Storage } from './inventory';
+import { makeSlotRow, stackIcon } from './hotbar';
+import { bindInventoryDrag } from './inventory-drag';
+import { count, stackCount, stackName, type SlotAddress, type Stack, type Storage } from './inventory';
 
 export function node<T extends HTMLElement = HTMLElement>(id: string) {
   return document.getElementById(id) as T;
@@ -40,11 +41,167 @@ function setPressed(control: HTMLElement, pressed: boolean) {
   return control;
 }
 
+function renderItemCard(card: HTMLElement, game: Game, item: Stack) {
+  const [category, description] = INVENTORY_INFO[item.id];
+  const heading = element('div', undefined, 'item-card-heading');
+  const picture = element('div', undefined, 'item-card-icon');
+  picture.append(stackIcon(item));
+  const identity = element('div');
+  const amount = item.kind === 'item' ? ' · ×' + stackCount(item) :
+    item.id === 'can' ? ' · 水量 ' + game.water + '/' + WATER_CAPACITY : '';
+  identity.append(element('p', category + amount, 'item-card-meta'), element('h3', stackName(item)));
+  heading.append(picture, identity);
+  card.replaceChildren(heading, element('p', description, 'item-card-description'));
+}
+
+function positionItemCard(card: HTMLElement, anchor: HTMLElement, preferAbove = false) {
+  const rect = anchor.getBoundingClientRect();
+  const screen = document.documentElement;
+  const padding = 10, gap = 8;
+  const { offsetWidth: width, offsetHeight: height } = card;
+  const left = Math.max(padding, Math.min(rect.left, screen.clientWidth - width - padding));
+  const above = rect.top - height - gap, below = rect.bottom + gap;
+  const fitsBelow = below + height <= screen.clientHeight - padding;
+  const top = (preferAbove && above >= padding) || !fitsBelow ? above : below;
+  card.style.left = left + 'px';
+  card.style.top = Math.max(padding, Math.min(top, screen.clientHeight - height - padding)) + 'px';
+}
+
+export function bindHotbarItemCard(hotbar: HTMLElement, current: () => Game) {
+  const card = element('section', undefined, 'item-card hotbar-item-card');
+  card.setAttribute('popover', 'manual');
+  card.setAttribute('aria-label', '快捷栏物品信息');
+  hotbar.append(card);
+  let anchor: HTMLButtonElement | null = null;
+  let previewKey = '';
+  let touch = false;
+  let lastTouch = -Infinity;
+  function dismiss() {
+    if (card.matches(':popover-open')) card.hidePopover();
+    anchor = null;
+    previewKey = '';
+  }
+  function update() {
+    if (!anchor) return;
+    const game = current();
+    const item = game.bag[Number(anchor.dataset.index)];
+    if (!item || anchor.closest('[hidden]')) return dismiss();
+    const key = item.id + ':' + (item.kind === 'item' ? stackCount(item) : game.water);
+    if (key === previewKey) return;
+    previewKey = key;
+    renderItemCard(card, game, item);
+    if (!card.matches(':popover-open')) card.showPopover();
+    positionItemCard(card, anchor, true);
+  }
+  function preview(target: EventTarget | null) {
+    if (!(target instanceof Element)) return;
+    const slot = target.closest<HTMLButtonElement>('.inventory-slot');
+    if (!slot) return dismiss();
+    if (anchor !== slot) previewKey = '';
+    anchor = slot;
+    update();
+  }
+  hotbar.addEventListener('pointerover', event => {
+    if (event.pointerType === 'mouse' && !event.buttons && performance.now() - lastTouch > 500) preview(event.target);
+  });
+  hotbar.addEventListener('pointerleave', event => {
+    if (event.pointerType === 'mouse' && performance.now() - lastTouch > 500) dismiss();
+  });
+  hotbar.addEventListener('focusin', event => {
+    if (event.target instanceof Element && event.target.matches(':focus-visible')) preview(event.target);
+  });
+  hotbar.addEventListener('focusout', event => {
+    if (event.relatedTarget instanceof Node && !hotbar.contains(event.relatedTarget)) dismiss();
+  });
+  document.addEventListener('pointerdown', event => {
+    touch = event.pointerType === 'touch';
+    if (event.target instanceof Node && !hotbar.contains(event.target)) dismiss();
+  });
+  hotbar.addEventListener('click', event => {
+    if (!touch) return;
+    lastTouch = performance.now();
+    preview(event.target);
+  });
+  window.addEventListener('resize', () => { if (anchor) positionItemCard(card, anchor, true); });
+  return { dismiss, update };
+}
+
 export function inventoryPanel(game: Game, showWarehouse: boolean, source: SlotAddress | null,
-  select: (address: SlotAddress) => void, move: (from: SlotAddress, to: SlotAddress) => void,
-  equip: (index: number) => void, update: (message: string) => void, placement: (station: Station) => void) {
+  select: (address: SlotAddress | null) => void, move: (from: SlotAddress, to: SlotAddress) => void,
+  equip: (index: number | null) => void, update: (message: string) => void, placement: (station: Station) => void) {
   const storageNames = { bag: '背包', warehouse: '仓库' };
+  const layout = element('div', undefined, 'inventory-layout');
   const grids = element('div', undefined, showWarehouse ? 'storage-grids storage-pair' : 'storage-grids');
+  const card = element('section', undefined, 'item-card');
+  card.setAttribute('aria-label', '物品信息');
+  card.hidden = true;
+  layout.append(grids, card);
+  const desktop = matchMedia('(hover: hover) and (pointer: fine)');
+  let chosen = source;
+  let displayed: SlotAddress | null = null;
+  let highlighted: HTMLButtonElement | null = null;
+  let dismissTimer = 0;
+
+  function closeFloatingCard() {
+    if (card.matches(':popover-open')) card.hidePopover();
+  }
+
+  function positionCard() {
+    if (!highlighted || !card.isConnected || !card.hasAttribute('popover')) return;
+    if (!card.matches(':popover-open')) card.showPopover();
+    positionItemCard(card, highlighted);
+  }
+
+  function showCard(address: SlotAddress | null, floating = desktop.matches) {
+    window.clearTimeout(dismissTimer);
+    const item = address && game[address.storage][address.index];
+    if (!item || !address) {
+      highlighted?.setAttribute('aria-pressed', 'false');
+      highlighted = null;
+      displayed = null;
+      closeFloatingCard();
+      card.hidden = true;
+      return;
+    }
+    card.hidden = false;
+    if (floating) card.setAttribute('popover', 'manual');
+    else {
+      closeFloatingCard();
+      card.removeAttribute('popover');
+    }
+    if (displayed?.storage === address.storage && displayed.index === address.index) {
+      positionCard();
+      return;
+    }
+    displayed = address;
+    highlighted?.setAttribute('aria-pressed', 'false');
+    highlighted = grids.querySelector('[data-storage="' + address.storage + '"][data-index="' + address.index + '"]');
+    highlighted?.setAttribute('aria-pressed', 'true');
+    renderItemCard(card, game, item);
+    if (address.storage === 'bag' && item.id === 'radish') {
+      const actions = element('div', undefined, 'sheet-actions');
+      actions.append(button('留种 ×' + SEEDS_PER_RADISH, () => update(saveSeed(game, address.index))));
+      card.append(actions);
+    }
+    positionCard();
+  }
+
+  function inspect(address: SlotAddress, floating = desktop.matches) {
+    chosen = game[address.storage][address.index] ? address : null;
+    select(chosen);
+    if (address.storage === 'bag') {
+      equip(chosen?.index ?? null);
+      if (!layout.closest('dialog')?.open) return;
+      for (const slot of grids.querySelectorAll<HTMLButtonElement>('[data-storage="bag"]')) {
+        slot.classList.toggle('slot-equipped', Number(slot.dataset.index) === game.equippedSlot);
+      }
+      for (const row of grids.querySelectorAll('.inventory-grid:has([data-storage="bag"]) .slot-row')) {
+        row.classList.toggle('active-inventory-row', Math.floor(Number(row.querySelector('button')?.dataset.index) / HOTBAR_COLUMNS) === game.hotbarRow);
+      }
+    }
+    showCard(chosen, floating);
+  }
+
   for (const storage of (showWarehouse ? ['warehouse', 'bag'] : ['bag']) as Storage[]) {
     const section = element('section', undefined, 'inventory-grid');
     section.setAttribute('aria-label', storageNames[storage] + '格子');
@@ -52,62 +209,31 @@ export function inventoryPanel(game: Game, showWarehouse: boolean, source: SlotA
     const heading = element('h3', storageNames[storage] + ' ' + slots.filter(Boolean).length + ' / ' + slots.length, 'inventory-heading');
     section.append(heading);
     for (let start = 0; start < slots.length; start += HOTBAR_COLUMNS) {
-      const row = makeSlotRow(storage, start, select, storage === 'bag');
+      const row = makeSlotRow(storage, start, address => inspect(address), storage === 'bag');
       row.row.classList.toggle('active-inventory-row', storage === 'bag' && start / HOTBAR_COLUMNS === game.hotbarRow);
-      row.update(game, source, true);
+      row.update(game, null, true);
       section.append(row.row);
     }
     grids.append(section);
   }
 
-  let dragged: SlotAddress | null = null;
-  const addressOf = (event: Event) => {
-    const slot = (event.target as HTMLElement).closest<HTMLButtonElement>('.inventory-slot');
-    return slot ? { slot, storage: slot.dataset.storage as Storage, index: Number(slot.dataset.index) } : null;
-  };
-  grids.addEventListener('dragstart', event => {
-    const address = addressOf(event);
-    if (!address || !game[address.storage][address.index] || !event.dataTransfer) return;
-    dragged = { storage: address.storage, index: address.index };
-    event.dataTransfer.effectAllowed = 'move';
-    event.dataTransfer.setData('text/plain', 'inventory-slot');
-    address.slot.classList.add('slot-moving');
+  bindInventoryDrag(grids, game, move, address => showCard(address, true), address => inspect(address, false));
+  layout.addEventListener('pointerout', event => {
+    if (event.pointerType !== 'mouse' || !card.hasAttribute('popover') || !(event.target instanceof Element)) return;
+    if (!event.target.closest('.inventory-slot, .item-card')) return;
+    const next = event.relatedTarget;
+    if (next instanceof Element && layout.contains(next) && next.closest('.inventory-slot, .item-card')) return;
+    dismissTimer = window.setTimeout(() => {
+      if (card.contains(document.activeElement)) return;
+      showCard(chosen);
+    }, 180);
   });
-  grids.addEventListener('dragend', () => {
-    dragged = null;
-    grids.querySelector('.slot-moving')?.classList.remove('slot-moving');
-  });
-  grids.addEventListener('dragover', event => {
-    if (!dragged || !addressOf(event)) return;
-    event.preventDefault();
-    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
-  });
-  grids.addEventListener('drop', event => {
-    const destination = addressOf(event);
-    if (!dragged || !destination) return;
-    event.preventDefault();
-    const origin = dragged;
-    dragged = null;
-    grids.querySelector('.slot-moving')?.classList.remove('slot-moving');
-    move(origin, destination);
-  });
-
-  const item = source && game[source.storage][source.index];
-  const details = element('div', undefined, 'sheet-row inventory-details');
-  if (item && source) {
-    details.append(element('span', describeSlot(game, item) + ' · 点目标格移动'));
-    if (source.storage === 'bag') {
-      const actions = element('div', undefined, 'sheet-actions');
-      actions.append(button(item.id === 'kiln' || item.id === 'crock' ? '选用摆放' : '选用', () => equip(source.index), false, true));
-      if (item.id === 'radish') {
-        actions.append(button('留种 ×' + SEEDS_PER_RADISH, () => update(saveSeed(game, source.index))));
-      }
-      details.append(actions);
-    }
-  } else {
-    details.append(element('span', '拖动一格，或先点物品，再点目标格。', 'sheet-note'));
-  }
-  if (showWarehouse) return [grids, details];
+  card.addEventListener('pointerenter', () => window.clearTimeout(dismissTimer));
+  layout.addEventListener('wheel', () => {
+    if (card.hasAttribute('popover')) showCard(null);
+  }, { passive: true });
+  if (source) queueMicrotask(() => { if (layout.isConnected) showCard(source); });
+  if (showWarehouse) return [layout];
   const crafting = element('ul', undefined, 'sheet-list');
   crafting.append(
     listRow('盐灶 · ' + costs(KILN_COST),
@@ -115,7 +241,7 @@ export function inventoryPanel(game: Game, showWarehouse: boolean, source: SlotA
         () => placement('kiln'), !canBuild(game, 'kiln'))),
     listRow('腌菜缸 · 在盐灶烧制', button(game.stations.jar ? '已摆放' : '摆放', () => placement('jar'), !canBuild(game, 'jar'))),
   );
-  return [grids, details, element('h3', '制作与摆放', 'section-title'), crafting];
+  return [layout, element('h3', '制作与摆放', 'section-title'), crafting];
 }
 
 export function stationPanel(game: Game, station: Station, update: (message: string) => void,
@@ -307,7 +433,7 @@ export function ledgerPanel(game: Game, selected: EntryId, select: (id: EntryId)
   return spread;
 }
 
-export function mapPanel(world: World, game: Game) {
+export function mapPanel(world: World, game: Game, ripples: Point[]) {
   const map = element('div', undefined, 'regional-map');
   const canvas = element('canvas');
   canvas.width = world.cols * 8;
@@ -331,7 +457,7 @@ export function mapPanel(world: World, game: Game) {
   }
   marker('田记所', 6, 5, '所');
   for (const { label, tile, mark } of world.landmarks) marker(label, ...tile, mark);
-  marker('回水湾钓点', ...world.fishing.water, '钓');
+  for (const tile of ripples) marker('涟漪钓点', ...tile, '钓');
   if (game.entries.rockSalt) marker('岩盐发现处', ...RESOURCES['buried-salt'].tile, '盐');
   for (const [station, position] of Object.entries(game.stations) as [Station, [number, number]][]) {
     marker(STATIONS[station], ...position, station === 'kiln' ? '灶' : '缸');

@@ -38,6 +38,7 @@ window.startLiuwanScene = function ({layout, jobMeter, assetUrl = file => file, 
   const base = layer();
   const groundLayer = layer();
   const scene = layer();
+  const shadowMasks = new Map();
   const sprites = {
     figure: {...window.GroundAssets.figure, contact: 18},
     cottage: D.cottage,
@@ -94,31 +95,33 @@ window.startLiuwanScene = function ({layout, jobMeter, assetUrl = file => file, 
   ] : demoActors;
   const mudPatches = fixedActors.filter(actor => actor.kind === 'clay');
   let actors = fixedActors;
+  let plotStates = [];
 
   function bedColor(cells, x, y) {
     return bedColors[cells[Math.floor(y / TILE) * world.cols + Math.floor(x / TILE)]];
   }
 
   function drawBeds(game) {
+    const signature = game.plots.map(plot => !plot.tilled ? 0 : plot.watered === null ? 1 : 2).join('');
+    if (signature === previousGround) return;
+    previousGround = signature;
     const cells = [...world.cells];
     for (const plot of world.plots) {
       const status = game.plots[plot.id];
-      for (let dy = 0; dy < 2; dy++) {
-        for (let dx = 0; dx < 2; dx++) {
+      if (!status.tilled && layout) continue;
+      for (let dy = 0; dy < plot.size / TILE; dy++) {
+        for (let dx = 0; dx < plot.size / TILE; dx++) {
           const i = (plot.y / TILE + dy) * world.cols + plot.x / TILE + dx;
           cells[i] = status.tilled ? status.watered === null ? 'dry' : 'wet' : 'grass';
         }
       }
     }
-    const signature = cells.join(',');
-    if (signature === previousGround) return;
-    previousGround = signature;
     groundLayer.drawImage(base.canvas, 0, 0);
     for (const plot of world.plots) {
       if (!game.plots[plot.id].tilled) continue;
       const colors = bedColor(cells, plot.x, plot.y);
       groundLayer.fillStyle = colors;
-      groundLayer.fillRect(plot.x + 5, plot.y + 54, 54, 6);
+      groundLayer.fillRect(plot.x + 3, plot.y + plot.size - 7, plot.size - 6, BED_HEIGHT);
     }
     painter.field(groundLayer, {...world, cells}, BED_HEIGHT);
     if (layout) return;
@@ -159,16 +162,20 @@ window.startLiuwanScene = function ({layout, jobMeter, assetUrl = file => file, 
     scene.restore();
   }
 
-  function shadow(actor) {
+  function shadow(actor, sun) {
     const {kind, x, level} = actor;
     const y = actor.y - level;
-    const projected = D.shadows[kind];
-    if (projected) {
-      scene.drawImage(images[kind + 'Shadow'], x - projected.anchor[0], y - projected.anchor[1]);
+    if (sun) {
+      if (sun.strength) drawSunShadow(actor, sun);
+    } else {
+      const projected = D.shadows[kind];
+      if (projected) {
+        scene.drawImage(images[kind + 'Shadow'], x - projected.anchor[0], y - projected.anchor[1]);
+      }
     }
     const width = sprites[kind]?.contact;
     if (!width) return;
-    if (isTree(kind)) {
+    if (!sun && isTree(kind)) {
       scene.fillStyle = '#3043322b';
       scene.fillRect(x - 9, y - 2, 27, 4);
       scene.fillRect(x - 4, y + 2, 27, 3);
@@ -178,11 +185,34 @@ window.startLiuwanScene = function ({layout, jobMeter, assetUrl = file => file, 
     scene.fillRect(Math.round(x - width / 2), y - 2, width, 4);
   }
 
+  function drawSunShadow(actor, sun) {
+    const crop = actor.kind === 'crop';
+    const key = crop ? actor.stage : actor.kind;
+    const sprite = crop ? {anchor: [24, 66]} : sprites[key];
+    const mask = shadowMasks.get(key);
+    if (!mask || !sprite) return;
+    const scale = actor.scale ?? 1;
+    const [ax, ay] = sprite.anchor;
+    const x = crop ? actor.plot.x + actor.plot.size / 2 : actor.x;
+    const y = crop ? actor.y - BED_HEIGHT : actor.y - actor.level;
+    const size = sprite.frameSize ?? mask.width;
+    const column = sprite.frameSize ? E.hash(actor.x, actor.y) % sprite.frames : 0;
+    scene.save();
+    scene.globalAlpha = sun.strength;
+    scene.translate(x, y);
+    const spread = isTree(key) ? .62 : .86;
+    scene.transform(spread * scale, 0, -sun.dx * scale, -sun.dy * scale, 0, 0);
+    scene.drawImage(mask, column * size, 0, size, mask.height, -ax, -ay, size, mask.height);
+    scene.restore();
+  }
+
   function drawCrop(plot, stage) {
-    const x = plot.x + 32, y = plot.y + 34 - BED_HEIGHT;
+    const x = plot.x + plot.size / 2, y = plot.y + plot.size / 2 + 2 - BED_HEIGHT;
     const image = images[stage];
     if (image) {
-      scene.drawImage(image, x - 24, y - 66);
+      const scale = layout ? .67 : 1;
+      scene.drawImage(image, x - Math.round(24 * scale), y - Math.round(66 * scale),
+        Math.round(image.width * scale), Math.round(image.height * scale));
     } else {
       scene.fillStyle = '#563d2a';
       scene.fillRect(x - 3, y - 1, 7, 3);
@@ -212,15 +242,26 @@ window.startLiuwanScene = function ({layout, jobMeter, assetUrl = file => file, 
   }
 
   const daylight = [
-    [0, 123, 157, 173, .19],
-    [180, 180, 194, 173, .02],
-    [480, 245, 219, 169, .025],
-    [720, 233, 155, 95, .20],
-    [900, 50, 66, 122, .27],
-    [1080, 37, 49, 100, .34],
+    [0, 136, 138, 170, .35],
+    [90, 238, 207, 151, .15],
+    [360, 255, 240, 191, .08],
+    [540, 255, 226, 169, .09],
+    [660, 236, 149, 76, .32],
+    [735, 139, 84, 115, .43],
+    [840, 21, 34, 68, .67],
+    [960, 16, 26, 56, .73],
+    [1080, 13, 22, 49, .76],
   ];
 
-  function drawDaylight(minute) {
+  function sunAt(minute) {
+    // East is right on the map. The shadow points away from the sun.
+    const angle = Math.PI * Math.min(minute / 720, 1);
+    const height = Math.sin(angle);
+    const strength = .24 * Math.min(1, .35 + minute / 55, Math.max(0, (750 - minute) / 50));
+    return {dx: -.81 * Math.cos(angle), dy: .48 - height * .32, strength};
+  }
+
+  function drawDaylight(minute, sun) {
     const index = daylight.findIndex(frame => frame[0] >= minute);
     const start = daylight[Math.max(0, index - 1)];
     const end = daylight[index];
@@ -228,20 +269,35 @@ window.startLiuwanScene = function ({layout, jobMeter, assetUrl = file => file, 
     const [, r, g, b, alpha] = start.map((value, i) => value + (end[i] - value) * progress);
     scene.fillStyle = `rgba(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)}, ${alpha})`;
     scene.fillRect(view.x, view.y, view.width, view.height);
+    if (sun.strength && Math.abs(sun.dx) > .02) {
+      const east = sun.dx < 0;
+      const light = scene.createLinearGradient(east ? W : 0, 0, east ? 0 : W, 0);
+      light.addColorStop(0, `rgba(255, 202, 117, ${Math.abs(sun.dx) * .28 * sun.strength / .24})`);
+      light.addColorStop(1, 'rgba(255, 202, 117, 0)');
+      scene.fillStyle = light;
+      scene.fillRect(view.x, view.y, view.width, view.height);
+    }
   }
 
   function drawFishing(person, motion, phase) {
-    const [x, y] = world.fishing.water.map(tile => tile * TILE + TILE / 2);
     const ripple = reducedMotion.matches ? 6 : 5 + phase % 12 / 2;
     scene.strokeStyle = '#d0ede0';
-    scene.beginPath();
-    scene.ellipse(x, y, ripple, 2, 0, 0, Math.PI * 2);
-    scene.stroke();
+    for (const [col, row] of motion.ripples) {
+      const x = col * TILE + TILE / 2, y = row * TILE + TILE / 2;
+      const inner = Math.max(2, ripple - 2);
+      scene.beginPath();
+      scene.ellipse(x, y, ripple + 2, 3, 0, 0, Math.PI * 2);
+      scene.moveTo(x + inner, y);
+      scene.ellipse(x, y, inner, 1, 0, 0, Math.PI * 2);
+      scene.stroke();
+    }
     if (!motion.fishing) return;
-    const rod = [person.x + 13, person.y - 27];
+    const [x, y] = motion.fishing.tile.map(tile => tile * TILE + TILE / 2);
+    const direction = Math.sign(x - person.x) || 1;
+    const rod = [person.x + direction * 13, person.y - 27];
     scene.strokeStyle = '#745438';
     scene.beginPath();
-    scene.moveTo(person.x + 5, person.y - 14);
+    scene.moveTo(person.x + direction * 5, person.y - 14);
     scene.lineTo(...rod);
     scene.stroke();
     scene.strokeStyle = '#ddd9bd';
@@ -249,8 +305,8 @@ window.startLiuwanScene = function ({layout, jobMeter, assetUrl = file => file, 
     scene.moveTo(...rod);
     scene.lineTo(x, y);
     scene.stroke();
-    scene.fillStyle = motion.fishing.biting ? '#f7cf60' : '#cc7659';
-    const size = motion.fishing.biting ? 7 : 4;
+    scene.fillStyle = motion.fishing.hooked ? '#f7cf60' : '#cc7659';
+    const size = motion.fishing.hooked ? 7 : 4;
     scene.fillRect(x - 2, y - size, 4, size);
   }
 
@@ -362,15 +418,18 @@ window.startLiuwanScene = function ({layout, jobMeter, assetUrl = file => file, 
       actor.y + 32 > view.y && actor.y - 128 < view.y + view.height);
     visible.push(person);
     for (const plot of world.plots) {
+      if (game.plots[plot.id].planted === null || plot.x < view.x - TILE || plot.x > view.x + view.width ||
+        plot.y < view.y - TILE || plot.y > view.y + view.height + TILE * 2) continue;
       const stage = G.cropStage(game, game.plots[plot.id]);
-      if (stage === 'ground' || stage === 'tilled') continue;
-      visible.push({kind: 'crop', plot, stage, y: plot.y + 34});
+      visible.push({kind: 'crop', plot, stage, y: plot.y + plot.size / 2 + 2, scale: layout ? .67 : 1});
     }
-    for (const actor of visible) shadow(actor);
+    const dayMinute = Math.floor(Math.min(G.DAY, Math.max(0, game.minute - (game.day - 1) * G.DAY)));
+    const sun = layout ? sunAt(dayMinute) : null;
+    for (const actor of visible) shadow(actor, sun);
     if (hovered?.kind === 'plot') {
       const plot = world.plots[hovered.id];
       scene.strokeStyle = '#fff7bb';
-      scene.strokeRect(plot.x + 2.5, plot.y + 2.5, 59, 59);
+      scene.strokeRect(plot.x + 2.5, plot.y + 2.5, plot.size - 5, plot.size - 5);
     }
     for (const actor of visible.sort((a, b) => a.y - b.y)) {
       if (actor.kind === 'crop') {
@@ -412,8 +471,7 @@ window.startLiuwanScene = function ({layout, jobMeter, assetUrl = file => file, 
       drawWorkImpact(motion.hit, hitFrame);
     }
     if (layout) {
-      const dayMinute = Math.min(G.DAY, Math.max(0, game.minute - (game.day - 1) * G.DAY));
-      drawDaylight(Math.floor(dayMinute));
+      drawDaylight(dayMinute, sun);
       drawFishing(person, motion, phase);
     }
     for (const actor of visible) {
@@ -434,8 +492,8 @@ window.startLiuwanScene = function ({layout, jobMeter, assetUrl = file => file, 
       if (done) {
         const plot = hovered.kind === 'plot' ? world.plots[hovered.id] : null;
         const actor = actors.find(candidate => candidate.id === hovered.id);
-        const px = plot ? plot.x + TILE : actor?.x;
-        const py = plot ? plot.y + TILE + 14 : actor?.y;
+        const px = plot ? plot.x + plot.size / 2 : actor?.x;
+        const py = plot ? plot.y + plot.size / 2 + (layout ? 2 : 14) : actor?.y;
         if (px !== undefined && py !== undefined) {
           scene.fillStyle = '#352e20';
           scene.fillRect(px - total * 5 - 1, py + 6, total * 10 + 2, 6);
@@ -487,7 +545,7 @@ window.startLiuwanScene = function ({layout, jobMeter, assetUrl = file => file, 
     const signature = JSON.stringify([position, hovered?.kind, hovered?.id, game.stations, placement, game.submitted,
       layout ? [game.strikes, game.depleted, Boolean(game.entries.rockSalt), game.action?.key, swingFrame,
         phase, game.day, Math.floor(game.minute), reducedMotion.matches, motion.facing, motion.hit, hitFrame,
-        motion.fishing, motion.packing] : game.minute >= game.mineReady,
+        motion.fishing, motion.ripples, motion.packing] : game.minute >= game.mineReady,
       game.plots.map(plot => G.cropStage(game, plot)), Object.entries(game.jobs).map(([station, job]) =>
         [station, Math.ceil(job.at - game.minute), job.ready, layout ? Math.floor((game.minute - job.started) * 12) : null])]);
     if (signature === previousFrame && viewport === previousView) return;
@@ -505,13 +563,29 @@ window.startLiuwanScene = function ({layout, jobMeter, assetUrl = file => file, 
                   view.left, view.top, view.width, view.height);
   }
 
-  const archive = {kind: 'archive', site: 'archive', actor: 'cottage', label: '田记所', points: [[6, 6], [7, 6]]};
+  const archiveBounds = {left: 4, right: 7, top: 3, bottom: 5};
+  const archiveDoor = [[6, 6], [7, 6]];
+  const archiveFootprint = [];
+  const archiveApproaches = [];
+  for (let x = archiveBounds.left; x <= archiveBounds.right; x++) {
+    archiveApproaches.push([x, archiveBounds.bottom + 1]);
+    for (let y = archiveBounds.top; y <= archiveBounds.bottom; y++) archiveFootprint.push([x, y]);
+  }
+  for (let y = archiveBounds.top; y <= archiveBounds.bottom; y++) {
+    archiveApproaches.push([archiveBounds.left - 1, y], [archiveBounds.right + 1, y]);
+  }
+  const archive = {
+    kind: 'archive', site: 'archive', actor: 'cottage', label: '田记所',
+    points: layout ? archiveApproaches : archiveDoor,
+    footprint: archiveFootprint,
+  };
   const stations = [
     {kind: 'kiln', actor: 'kiln', label: '盐灶', points: []},
     {kind: 'jar', actor: 'jar', label: '腌菜缸', points: []},
   ];
-  const plots = world.plots.map(plot => {
+  const plotTargets = world.plots.map(plot => {
     const x = plot.x / TILE, y = plot.y / TILE;
+    if (layout) return {kind: 'plot', id: plot.id, tile: [x, y], points: [[x, y], ...adjacent([x, y])]};
     return {kind: 'plot', id: plot.id, points: [[x, y], [x + 1, y], [x, y + 1], [x + 1, y + 1]]};
   });
   const waterRows = layout ? world.shoreColumns.map((shore, y) => {
@@ -522,33 +596,41 @@ window.startLiuwanScene = function ({layout, jobMeter, assetUrl = file => file, 
     return {kind: 'water', id: 'river-' + y, label: '河流', points};
   }) : [];
   const river = {kind: 'water', id: 'river', label: '河流', points: waterRows.flatMap(target => target.points)};
-  const fishing = {kind: 'fishing', label: '回水湾', tile: world.fishing.water, points: [world.fishing.bank]};
+  const fishingByTile = new Map();
+  for (const point of river.points) {
+    for (const tile of adjacent(point)) {
+      const [x, y] = tile;
+      const shore = world.shoreColumns[y];
+      if (shore === undefined || x < shore || x >= world.cols) continue;
+      const key = tile.join(',');
+      if (!fishingByTile.has(key)) fishingByTile.set(key, {kind: 'fishing', tile, points: []});
+      fishingByTile.get(key).points.push(point);
+    }
+  }
+  const fishingSpots = [...fishingByTile.values()];
   const targets = layout ? [
     archive, ...stations,
     {kind: 'chest', actor: 'crate', label: '仓库', tile: chestTile, points: adjacent(chestTile)},
     {kind: 'ruin', actor: 'ruin', label: '旧制盐台', tile: layout.saltRuin, points: adjacent(layout.saltRuin)},
-    river, fishing,
+    river,
     ...Object.entries(layout.resources).map(([id, resource]) => ({
       kind: 'resource', id, actor: resource.actor, tile: resource.tile,
       label: {clay: '黏土', willow: '柳树', oak: '橡树', stump: '树桩', salt: '白纹岩石'}[resource.actor] ?? '岩石',
       points: resource.actor === 'clay' ? [resource.tile] : adjacent(resource.tile),
     })),
-    ...plots,
   ] : [
     {...archive, label: '提交物志'},
     {kind: 'kiln', actor: 'kiln', label: '制粗盐', points: []},
     {kind: 'jar', actor: 'jar', label: '腌菜', points: []},
     {kind: 'salt', site: 'salt', actor: 'salt', label: '敲岩盐', points: [[21, 6], [22, 5]]},
     {kind: 'forage', site: 'woods', actor: 'seedBox', label: '收集种子', points: [[16, 5]]},
-    ...plots,
+    ...plotTargets,
   ];
   const blocked = new Set();
   const scenery = new Set();
   const restoredScenery = new Set();
   const index = ([x, y]) => y * world.cols + x;
-  for (let y = 3; y <= 5; y++) {
-    for (let x = 4; x <= 7; x++) scenery.add(index([x, y]));
-  }
+  for (const tile of archiveFootprint) scenery.add(index(tile));
   for (const actor of fixedActors) {
     if (actor.kind === 'cottage' || actor.resource) continue;
     const cell = index([Math.floor(actor.x / TILE), Math.floor(actor.y / TILE)]);
@@ -570,6 +652,7 @@ window.startLiuwanScene = function ({layout, jobMeter, assetUrl = file => file, 
   }
 
   function setStations(game) {
+    plotStates = game.plots;
     actors = [
       ...fixedActors.filter(actor => !actor.resource || actor.kind === 'clay' || !game.depleted[actor.id]),
       ...Object.entries(game.stations).map(([kind, [x, y]]) => at(kind, x + .5, y + .6)),
@@ -592,7 +675,7 @@ window.startLiuwanScene = function ({layout, jobMeter, assetUrl = file => file, 
       if (plot && game.plots[plot.id].tilled) return false;
       if (fixedActors.some(actor => actor.resource &&
         (actor.resource.renews || !game.depleted[actor.id]) && index(actor.resource.tile) === index(tile))) return false;
-      if (archive.points.some(point => index(point) === index(tile))) return false;
+      if (archiveDoor.some(point => index(point) === index(tile))) return false;
     } else if (E.family(world.cells[index(tile)]) === 'tilled') return false;
     if (Object.entries(game.stations).some(([id, point]) => id !== kind && index(tile) === index(point))) return false;
 
@@ -607,11 +690,21 @@ window.startLiuwanScene = function ({layout, jobMeter, assetUrl = file => file, 
   }
 
   function pick(x, y, tool) {
+    const plot = E.plotAt(world, x, y);
     if (layout) {
       const col = Math.floor(x / TILE), row = Math.floor(y / TILE);
-      if (tool === 'rod' && [world.fishing.water, world.fishing.bank].some(([px, py]) => px === col && py === row)) return fishing;
+      if (tool === 'rod' && col >= world.shoreColumns[row]) {
+        const spot = fishingByTile.get([col, row].join(','));
+        const accessible = candidate => candidate.points.some(point => G.passable(world, blocked, ...point));
+        if (spot && accessible(spot)) return spot;
+        // A click in deeper water uses the closest castable shoreline tile.
+        return fishingSpots.reduce((best, candidate) => {
+          const distance = ({tile: [x, y]}) => Math.abs(x - col) + Math.abs(y - row);
+          return accessible(candidate) && (!best || distance(candidate) < distance(best)) ? candidate : best;
+        }, null);
+      }
       const facility = targets.find(target => target.kind !== 'resource' &&
-        target.kind !== 'fishing' && target.tile?.[0] === col && target.tile[1] === row);
+        target.tile?.[0] === col && target.tile[1] === row);
       if (facility) return facility;
       const water = waterRows[row];
       if (water && (col >= world.shoreColumns[row] ||
@@ -619,6 +712,14 @@ window.startLiuwanScene = function ({layout, jobMeter, assetUrl = file => file, 
       const tree = actors.find(actor => actor.resource && isTree(actor.kind) &&
         actor.resource.tile[0] === col && actor.resource.tile[1] === row);
       if (tree) return targets.find(target => target.kind === 'resource' && target.id === tree.id);
+      if (plot && !blocked.has(index([col, row])) &&
+        (tool === 'hoe' || (plotStates[plot.id]?.tilled && [undefined, 'pick', 'can'].includes(tool)))) {
+        return plotTargets[plot.id];
+      }
+      if (tool === 'rod') {
+        const spot = fishingSpots.find(candidate => candidate.points.some(([x, y]) => x === col && y === row));
+        if (spot) return spot;
+      }
     }
     for (const target of targets) {
       if (!target.actor) continue;
@@ -643,8 +744,7 @@ window.startLiuwanScene = function ({layout, jobMeter, assetUrl = file => file, 
         return target;
       }
     }
-    const plot = E.plotAt(world, x, y);
-    return plot ? targets.find(target => target.kind === 'plot' && target.id === plot.id) : null;
+    return plot && !layout ? plotTargets[plot.id] : null;
   }
 
   const files = {...ground.files, ...cropFiles};
@@ -653,8 +753,10 @@ window.startLiuwanScene = function ({layout, jobMeter, assetUrl = file => file, 
     files.mudDug = 'assets/mud/bank-mud-dug-32x32.png';
   }
   for (const [key, sprite] of Object.entries(sprites)) files[key] = sprite.file;
-  for (const [key, shadow] of Object.entries(D.shadows)) {
-    if (sprites[key]) files[key + 'Shadow'] = shadow.file;
+  if (!layout) {
+    for (const [key, shadow] of Object.entries(D.shadows)) {
+      if (sprites[key]) files[key + 'Shadow'] = shadow.file;
+    }
   }
   Promise.all(Object.entries(files).map(([key, file]) => new Promise((resolve, reject) => {
     const image = new Image();
@@ -662,9 +764,23 @@ window.startLiuwanScene = function ({layout, jobMeter, assetUrl = file => file, 
     image.onerror = () => reject(new Error('未能加载 ' + file));
     image.src = assetUrl(file);
   }))).then(() => {
+    if (layout) {
+      for (const key of [...Object.keys(sprites), ...Object.keys(cropFiles)]) {
+        const image = images[key];
+        const mask = document.createElement('canvas');
+        mask.width = image.width;
+        mask.height = image.height;
+        const context = mask.getContext('2d');
+        context.drawImage(image, 0, 0);
+        context.globalCompositeOperation = 'source-in';
+        context.fillStyle = '#1c2525';
+        context.fillRect(0, 0, mask.width, mask.height);
+        shadowMasks.set(key, mask);
+      }
+    }
     painter = ground.create(images);
     painter.base(base, world);
-    return createControls({world, canvas, view, zoom, targets, blocked, draw, pick, setStations, canPlace});
+    return createControls({world, canvas, view, zoom, targets, plotTargets, fishingSpots, blocked, draw, pick, setStations, canPlace});
   }).catch(error => {
     status.textContent = error.message;
     status.setAttribute('role', 'alert');

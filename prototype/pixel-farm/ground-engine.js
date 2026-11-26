@@ -117,14 +117,30 @@
       }
       return {grass, water};
     });
-    const plots = [];
+    const legacyPlots = [];
     const fields = [[3, 7, 2], [6, 14, 1]];
     if (untouchedFields) fields.push([6, 21, 2]);
     for (const [left, top, height] of fields) {
       for (let row = 0; row < height; row++) {
         for (let col = 0; col < 4; col++) {
-          plots.push({id: plots.length, col, row, x: (left + col * 2) * TILE,
-                      y: (top + row * 2) * TILE, wet: (col + row) % 3 === 0});
+          legacyPlots.push({id: legacyPlots.length, col, row, x: (left + col * 2) * TILE,
+                            y: (top + row * 2) * TILE, size: TILE * 2, wet: (col + row) % 3 === 0});
+        }
+      }
+    }
+    const plots = untouchedFields ? [] : legacyPlots;
+    const plotIds = Array(cells.length).fill(-1);
+    if (untouchedFields) {
+      for (const [index, terrain] of cells.entries()) {
+        if (terrain !== 'grass') continue;
+        const col = index % cols, row = Math.floor(index / cols);
+        plotIds[index] = plots.length;
+        plots.push({id: plots.length, col, row, x: col * TILE, y: row * TILE, size: TILE, wet: (col + row) % 3 === 0});
+      }
+    } else {
+      for (const plot of plots) {
+        for (let dy = 0; dy < 2; dy++) {
+          for (let dx = 0; dx < 2; dx++) plotIds[(plot.y / TILE + dy) * cols + plot.x / TILE + dx] = plot.id;
         }
       }
     }
@@ -142,15 +158,20 @@
       {id: 'bank', label: '柳湾河 · 取水岸', tile: [31, 13], mark: '水'},
       {id: 'expansion', label: '南侧扩垦地', tile: [9, 23], mark: '地'},
     ];
-    const fishing = {water: [33, 20], bank: [32, 20]};
-    return {cols, rows, cells, plots, surfaces, shoreColumns, bankStarts, sites, landmarks, fishing};
+    return {cols, rows, cells, plots, plotIds, legacyPlots, surfaces, shoreColumns, bankStarts, sites, landmarks};
   }
   function cellsWithMoisture(world,mode){
     const cells=[...world.cells];
-    for(const plot of world.plots){const wet=mode==='wet'||mode==='mixed'&&plot.wet;for(let dy=0;dy<2;dy++)for(let dx=0;dx<2;dx++)cells[(plot.y/32+dy)*world.cols+plot.x/32+dx]=wet?'wet':'dry'}
+    for (const [index, id] of world.plotIds.entries()) {
+      if (id >= 0) cells[index] = mode === 'wet' || (mode === 'mixed' && world.plots[id].wet) ? 'wet' : 'dry';
+    }
     return cells;
   }
-  function plotAt(world,x,y){return world.plots.find(p=>x>=p.x&&x<p.x+64&&y>=p.y&&y<p.y+64)||null}
+  function plotAt(world, x, y) {
+    const col = Math.floor(x / TILE), row = Math.floor(y / TILE);
+    if (col < 0 || col >= world.cols || row < 0 || row >= world.rows) return null;
+    return world.plots[world.plotIds[row * world.cols + col]] ?? null;
+  }
   function fixture(){
     const cols=14,rows=5,cells=Array(cols*rows).fill('grass');
     const put=(x,y,kind='dry')=>cells[y*cols+x]=kind;
