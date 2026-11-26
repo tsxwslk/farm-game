@@ -141,6 +141,17 @@ const migrations: Partial<Record<number, (save: unknown, world: World) => unknow
       },
     };
   },
+  5(value) {
+    const parsed = saveSchema.extend({ game: gameSchema.extend({ schemaVersion: z.literal(5) }) }).safeParse(value);
+    if (!parsed.success) throw new Error('旧存档格式有误。');
+    const { game } = parsed.data;
+    for (const stack of [...game.bag, ...game.warehouse]) {
+      if (stack?.kind !== 'item' || stack.id !== 'salt') continue;
+      // One old unit covered one jar of pickles, which now takes three seasoning portions.
+      for (const batch of stack.batches) batch.quantity *= 3;
+    }
+    return { ...parsed.data, game: { ...game, schemaVersion: 6 } };
+  },
 };
 
 export function validateSave(value: unknown, world: World): Save {

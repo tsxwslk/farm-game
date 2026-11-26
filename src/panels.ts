@@ -249,25 +249,27 @@ export function stationPanel(game: Game, station: Station, update: (message: str
   const list = element('ul', undefined, 'sheet-list');
   const job = game.jobs[station];
   if (job) {
+    const recipe = RECIPES[job.recipe];
     const remaining = element('p', undefined, 'sheet-note');
     remaining.id = 'job-remaining';
     if (job.ready) {
       remaining.textContent = '成品待领取';
-      return [remaining, button('领取' + ITEMS[RECIPES[job.recipe].output], () => update(claimJob(game, station)), false, true)];
+      return [remaining, button('领取' + ITEMS[recipe.output] + ' ×' + recipe.outputQuantity,
+        () => update(claimJob(game, station)), false, true)];
     }
     const meter = element('progress', undefined, 'job-progress');
     meter.id = 'job-progress';
-    meter.setAttribute('aria-label', RECIPES[job.recipe].label + '进度');
+    meter.setAttribute('aria-label', recipe.label + '进度');
     const { remaining: minutes, elapsed, duration } = jobMeter(job, game.minute);
     meter.max = duration;
     meter.value = elapsed;
-    remaining.textContent = RECIPES[job.recipe].label + ' · 剩 ' + minutes + ' 游戏分钟';
+    remaining.textContent = recipe.label + ' · 剩 ' + minutes + ' 游戏分钟';
     return [remaining, meter];
   }
   for (const id of Object.keys(RECIPES) as RecipeId[]) {
     const recipe = RECIPES[id];
     if (recipe.station !== station || (id === 'fishSoup' && !game.entries.crucian)) continue;
-    list.append(listRow(recipe.label + ' · ' + costs(recipe.inputs),
+    list.append(listRow(recipe.label + ' · ' + costs(recipe.inputs) + ' → ' + ITEMS[recipe.output] + ' ×' + recipe.outputQuantity,
       button('开工', () => update(startJob(game, id)), !hasMaterials(game, recipe.inputs), true)));
   }
   const actions = element('div', undefined, 'sheet-actions');

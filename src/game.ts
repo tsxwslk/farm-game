@@ -1,13 +1,13 @@
 import {
   ENTRIES, ITEMS, KILN_COST, RECIPES, RESOURCES, SEEDS_PER_RADISH, STATIONS, STATION_ITEMS, TILL_HITS, TOOLS, TRADE, WATER_CAPACITY,
-  type EntryId, type Item, type Point, type RecipeId, type Station, type Tool,
+  type EntryId, type Item, type Point, type Recipe, type RecipeId, type Station, type Tool,
 } from './content';
 import type { Plot, Target, World } from './scene';
 import { batchesFor, consume, count, equippedStack, equippedTool, hasRoom, receive, startingInventory, type Stack } from './inventory';
 
 export const DAY = 1080;
 export const START: Point = [11, 6];
-export const SAVE_VERSION = 5;
+export const SAVE_VERSION = 6;
 export interface Entry {
   lit: boolean;
   deadline: number | null;
@@ -154,7 +154,7 @@ export function packStation(game: Game, station: Station) {
 export function catchFish(game: Game) {
   if (!hasRoom(game, 'crucian')) return '背包满了，鲫鱼游走了。';
   receive(game, 'crucian', 1, discover(game, 'crucian'));
-  return record(game, '钓到鲫鱼 ×1。可以用盐灶炖汤。');
+  return record(game, '钓到鲫鱼 ×1。可加粗盐炖汤，也可卖给田记所。');
 }
 
 export function targetKey(target: Target) {
@@ -272,12 +272,15 @@ export function operate(
 }
 
 export function startJob(game: Game, id: RecipeId) {
-  const recipe = RECIPES[id];
+  const recipe: Recipe = RECIPES[id];
   if (game.review || !game.stations[recipe.station] || game.jobs[recipe.station]) return '设施当前不可开工。';
   if (!hasMaterials(game, recipe.inputs)) return '缺少材料。';
   const at = game.minute + recipe.duration;
   const deadlines: Job['deadlines'] = {};
-  for (const [item, quantity] of itemCounts(recipe.inputs)) deadlines[item] = consume(game, item, quantity, at);
+  for (const [item, quantity] of itemCounts(recipe.inputs)) {
+    if (recipe.timedInputs?.includes(item)) deadlines[item] = consume(game, item, quantity, at);
+    else consume(game, item, quantity);
+  }
   game.jobs[recipe.station] = { recipe: id, started: game.minute, at, deadlines, ready: false };
   return record(game, '开始' + recipe.label + '。');
 }
@@ -285,11 +288,11 @@ export function startJob(game: Game, id: RecipeId) {
 export function claimJob(game: Game, station: Station) {
   const job = game.jobs[station];
   if (!job?.ready) return '尚无待领成品。';
-  const { output } = RECIPES[job.recipe];
+  const { output, outputQuantity } = RECIPES[job.recipe];
   if (!hasRoom(game, output)) return '背包满了，成品仍留在设施中。';
-  receive(game, output, 1, job.deadlines.rockSalt ?? null);
+  receive(game, output, outputQuantity, job.deadlines.rockSalt ?? null);
   delete game.jobs[station];
-  return record(game, '制成' + ITEMS[output] + ' ×1，已放入背包。');
+  return record(game, '制成' + ITEMS[output] + ' ×' + outputQuantity + '，已放入背包。');
 }
 
 export function advance(game: Game, amount: number, onHit: (action: Action) => string | undefined): string[] {
@@ -360,7 +363,7 @@ export function tradeLimit(game: Game, item: TradeItem) {
 }
 
 export function warnSale(game: Game, item: TradeItem, quantity: number) {
-  if (item !== 'radish' || game.entries.radish?.lit) return false;
+  if ((item !== 'radish' && item !== 'crucian') || game.entries[item]?.lit) return false;
   const fresh = batchesFor(game, item).some(({ batch }) => (batch.deadline ?? 0) > game.minute);
   return fresh && quantity >= count(game, item);
 }

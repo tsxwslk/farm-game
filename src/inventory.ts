@@ -110,10 +110,11 @@ export function consume(game: Game, item: Item, quantity: number, neededUntil = 
     if (batch.deadline === null || batch.deadline <= game.minute) return 1;
     return batch.deadline > neededUntil ? 0 : 2;
   }
-  let deadline = null;
+  let deadline: number | null = null;
   for (const { stack, index, batch } of stock) {
     if (!quantity) break;
-    deadline = batch.deadline;
+    // A mixed input can qualify if any of the units actually consumed is still eligible.
+    if (batch.deadline !== null && (deadline === null || batch.deadline > deadline)) deadline = batch.deadline;
     const removed = Math.min(batch.quantity, quantity);
     batch.quantity -= removed;
     quantity -= removed;

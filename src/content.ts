@@ -33,16 +33,16 @@ export const INVENTORY_INFO = {
   axe: ['农具', '砍柳树、橡树或清理树桩，取得木材。'],
   seeds: ['种子', '播在翻好的菜畦里，浇水后开始发芽。'],
   radish: ['作物', '可以留种、卖给田记所，或和粗盐一起腌制。'],
-  rockSalt: ['矿物', '带灰白纹的盐矿，在盐灶制成粗盐。'],
-  salt: ['加工材料', '由岩盐制成，用来腌制樱桃萝卜。'],
+  rockSalt: ['矿物', '带灰白纹的盐矿，可在盐灶熬成一批粗盐。'],
+  salt: ['加工材料', '由岩盐熬制，可用于腌萝卜和炖鲫鱼汤。'],
   pickle: ['加工品', '用粗盐腌成的樱桃萝卜，可卖给田记所。'],
   wood: ['建材', '从树木和树桩取得，用于搭建盐灶和烧制腌菜缸。'],
   stone: ['建材', '从普通岩石取得，可用来搭建盐灶。'],
   clay: ['建材', '河岸挖出的细土，可在盐灶烧制成腌菜缸。'],
   crock: ['设施', '摆在可达的空地上，可用粗盐腌制樱桃萝卜。'],
   kiln: ['设施', '摆在可达的空地上，可制盐、烧缸和炖鱼汤。'],
-  crucian: ['鱼获', '从柳湾河钓得，可用盐灶炖汤。'],
-  fishSoup: ['加工品', '在盐灶炖成的鲫鱼汤，记录了鲫鱼的一种用法。'],
+  crucian: ['鱼获', '从柳湾河钓得，可加粗盐炖汤，也可卖给田记所。'],
+  fishSoup: ['加工品', '鲫鱼加粗盐炖成的汤，可卖给田记所。'],
 } as const satisfies Record<Item | Tool, readonly [string, string]>;
 
 export const HOTBAR_COLUMNS = 8;
@@ -60,13 +60,26 @@ export interface Recipe {
   station: Station;
   inputs: Partial<Record<Item, number>>;
   output: Item;
+  outputQuantity: number;
   duration: number;
+  timedInputs?: readonly Item[];
 }
 export const RECIPES = {
-  salt: { label: '制粗盐', station: 'kiln', inputs: { rockSalt: 1 }, output: 'salt', duration: 45 },
-  crock: { label: '烧制腌菜缸', station: 'kiln', inputs: { clay: 3, wood: 1 }, output: 'crock', duration: 90 },
-  pickle: { label: '腌樱桃萝卜', station: 'jar', inputs: { radish: 1, salt: 1 }, output: 'pickle', duration: 75 },
-  fishSoup: { label: '炖鲫鱼汤', station: 'kiln', inputs: { crucian: 1 }, output: 'fishSoup', duration: 45 },
+  salt: {
+    label: '制粗盐', station: 'kiln', inputs: { rockSalt: 1 }, output: 'salt', outputQuantity: 12,
+    duration: 45, timedInputs: ['rockSalt'],
+  },
+  crock: {
+    label: '烧制腌菜缸', station: 'kiln', inputs: { clay: 3, wood: 1 }, output: 'crock', outputQuantity: 1, duration: 90,
+  },
+  pickle: {
+    label: '腌樱桃萝卜', station: 'jar', inputs: { radish: 1, salt: 3 }, output: 'pickle', outputQuantity: 1,
+    duration: 75, timedInputs: ['radish', 'salt'],
+  },
+  fishSoup: {
+    label: '炖鲫鱼汤', station: 'kiln', inputs: { crucian: 1, salt: 1 }, output: 'fishSoup', outputQuantity: 1,
+    duration: 45, timedInputs: ['crucian'],
+  },
 } as const satisfies Record<string, Recipe>;
 export type RecipeId = keyof typeof RECIPES;
 
@@ -74,12 +87,12 @@ export const ENTRIES = {
   radish: {
     section: '草木册', reward: 55, duration: 360,
     clue: '货箱里留有种子。翻地、播种、浇水后等它长熟。',
-    use: '将一份樱桃萝卜与粗盐放进腌菜缸。',
+    use: `将樱桃萝卜 ×${RECIPES.pickle.inputs.radish} 与粗盐 ×${RECIPES.pickle.inputs.salt} 放进腌菜缸。`,
   },
   rockSalt: {
     section: '矿物册', reward: 45, duration: 720,
     clue: '从田记所东边沿小径往北，经林缘向东走。旧制盐台旁的岩石露着灰白纹。',
-    use: '用盐灶制成粗盐，再用这批粗盐腌萝卜。',
+    use: `用盐灶把岩盐 ×${RECIPES.salt.inputs.rockSalt} 熬成粗盐 ×${RECIPES.salt.outputQuantity}，再用这批盐腌萝卜。`,
   },
   clay: {
     section: '矿物册', reward: 0, duration: 0,
@@ -89,17 +102,17 @@ export const ENTRIES = {
   crucian: {
     section: '水族册', reward: 35, duration: 480,
     clue: '带钓竿去柳湾河岸抛竿。水面出现涟漪的地方更容易咬钩。',
-    use: '把钓到的鲫鱼放进盐灶炖汤。',
+    use: `把鲫鱼 ×${RECIPES.fishSoup.inputs.crucian} 和粗盐 ×${RECIPES.fishSoup.inputs.salt} 放进盐灶炖汤。`,
   },
   pickle: {
     section: '加工品册', reward: 30, duration: 0,
-    clue: '在腌菜缸中放入樱桃萝卜与粗盐。',
+    clue: '在腌菜缸中用粗盐腌制樱桃萝卜。',
     use: '制成后收录，余货可交给田记所收购。',
   },
 } as const;
 export type EntryId = keyof typeof ENTRIES;
 
-export const TRADE = { sell: { radish: 12, pickle: 30 }, buy: { seeds: 6 }, dailySeeds: 6 } as const;
+export const TRADE = { sell: { radish: 12, pickle: 30, crucian: 16, fishSoup: 26 }, buy: { seeds: 6 }, dailySeeds: 6 } as const;
 export const STARTING_SEEDS = 3;
 export const SEEDS_PER_RADISH = 2;
 export const WATER_CAPACITY = 5;

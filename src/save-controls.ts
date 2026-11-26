@@ -1,4 +1,4 @@
-import { type Game, formatClock, newGame, SAVE_VERSION } from './game';
+import { type Game, formatClock, newGame } from './game';
 import { button, element, node } from './panels';
 import { openSaves, snapshot, validateSave, type Save } from './saves';
 import type { Scene } from './scene';
@@ -55,7 +55,7 @@ export function createSaveControls(scene: Scene, body: HTMLElement, current: () 
     const save = validateSave(data, world);
     try {
       setStations(save.game);
-      if (typeof version === 'number' && version < SAVE_VERSION) relocateForNewMap(save.game);
+      if (typeof version === 'number' && version < 5) relocateForNewMap(save.game);
       for (const [kind, point] of Object.entries(save.game.stations) as [Station, Point][]) {
         if (!canPlace(save.game, kind, point)) throw new Error('存档里的设施位置不可用。');
       }
