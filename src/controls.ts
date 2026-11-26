@@ -1,4 +1,4 @@
-import { BAG_SLOTS, HOTBAR_COLUMNS, ITEMS, RECIPES, SOUTH_PASS, STATIONS, STATION_ITEMS, TOOLS, type EntryId, type Point, type Station } from './content';
+import { HOTBAR_COLUMNS, ITEMS, RECIPES, SOUTH_PASS, STATIONS, STATION_ITEMS, TOOLS, type EntryId, type Point, type Station } from './content';
 import {
   advance, canBuild, canTravel, catchFish, formatClock, growthStatus, jobMeter, newGame, nextDay, operate, packStation, place,
   renewResources, targetAction, targetKey, targetProgress,
@@ -63,6 +63,7 @@ export async function createControls(scene: Scene) {
   let packedByHold = false;
   let panel: Panel | null = null;
   let selectedStack: SlotAddress | null = null;
+  let warehousePage = 0;
   let selectedEntry: EntryId = 'radish';
   let renderedMinute = -1;
   let savedReviewDay = 0;
@@ -86,6 +87,7 @@ export async function createControls(scene: Scene) {
 
   function restore(saved: Game) {
     game = saved;
+    warehousePage = 0;
     stopMovement();
     selected = hovered = placement = null;
     hit = null;
@@ -558,6 +560,16 @@ export async function createControls(scene: Scene) {
     if (sheet.open) sheet.close();
   }
 
+  function turnWarehousePage(page: number) {
+    const direction = page > warehousePage ? 'next' : 'previous';
+    warehousePage = page;
+    if (selectedStack?.storage === 'warehouse') selectedStack = null;
+    renderPanel();
+    const pager = body.querySelector('.warehouse-pages');
+    (pager?.querySelector<HTMLButtonElement>('[data-direction="' + direction + '"]:enabled') ??
+      pager?.querySelector<HTMLButtonElement>('button:enabled'))?.focus({ preventScroll: true });
+  }
+
   function renderPanel() {
     if (!panel) return;
     const mapTitle = game.position[1] >= SOUTH_PASS.bounds.y ? SOUTH_PASS.name + '地图' : '柳湾地图';
@@ -579,7 +591,8 @@ export async function createControls(scene: Scene) {
       body.replaceChildren(...mapPanel(world, game, ripples));
     } else if (panel === 'bag' || panel === 'warehouse') {
       const scroll = sheet.scrollTop;
-      body.replaceChildren(...inventoryPanel(game, panel === 'warehouse', selectedStack, address => { selectedStack = address; }, transferStack,
+      const warehouse = panel === 'warehouse' ? { page: warehousePage, turn: turnWarehousePage } : null;
+      body.replaceChildren(...inventoryPanel(game, warehouse, selectedStack, address => { selectedStack = address; }, transferStack,
         index => {
           selectSlot(index);
           if (placement) canvas.focus({ preventScroll: true });
@@ -656,7 +669,7 @@ export async function createControls(scene: Scene) {
   }
 
   function cycleRow() {
-    const row = (game.hotbarRow + 1) % (BAG_SLOTS / HOTBAR_COLUMNS);
+    const row = (game.hotbarRow + 1) % (game.bag.length / HOTBAR_COLUMNS);
     selectSlot(game.equippedSlot === null ? null : row * HOTBAR_COLUMNS + game.equippedSlot % HOTBAR_COLUMNS, row);
   }
 

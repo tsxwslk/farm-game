@@ -54,6 +54,9 @@ export const INVENTORY_INFO = {
 export const HOTBAR_COLUMNS = 8;
 export const BAG_SLOTS = 16;
 export const WAREHOUSE_SLOTS = 24;
+export const BAG_UPGRADE_PRICES = [100, 250] as const;
+export const MAX_BAG_SLOTS = BAG_SLOTS + HOTBAR_COLUMNS * BAG_UPGRADE_PRICES.length;
+export const WAREHOUSE_UPGRADE = { firstPrice: 80, priceStep: 40 } as const;
 export const STARTING_TOOLS = ['hoe', 'pick', 'can', 'axe', 'rod'] as const satisfies readonly Tool[];
 
 export const STATIONS = { kiln: '盐灶', jar: '腌菜缸' } as const;

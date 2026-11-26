@@ -1,5 +1,5 @@
 import { assetUrl } from './assets';
-import { BAG_SLOTS, CROPS, CROP_IDS, HOTBAR_COLUMNS, WATER_CAPACITY, type Item, type Tool } from './content';
+import { CROPS, CROP_IDS, HOTBAR_COLUMNS, MAX_BAG_SLOTS, WATER_CAPACITY, type Item, type Tool } from './content';
 import type { Game } from './game';
 import { equippedStack, stackCount, stackName, type SlotAddress, type Stack, type Storage } from './inventory';
 type Pixel = [color: string, x: number, y: number, width: number, height: number];
@@ -135,9 +135,11 @@ export function makeSlotRow(storage: Storage, start: number, select: (address: S
 }
 
 export function createHotbar(select: (index: number) => void) {
-  const totalRows = BAG_SLOTS / HOTBAR_COLUMNS;
-  const rows = Array.from({ length: totalRows }, (_, row) =>
-    makeSlotRow('bag', row * HOTBAR_COLUMNS, ({ index }) => select(index), true));
+  const rows = Array.from({ length: MAX_BAG_SLOTS / HOTBAR_COLUMNS }, (_, row) => {
+    const item = makeSlotRow('bag', row * HOTBAR_COLUMNS, ({ index }) => select(index), true);
+    item.row.hidden = true;
+    return item;
+  });
   const page = document.getElementById('hotbar-page-number')!;
   const label = document.getElementById('hotbar-selection')!;
   document.getElementById('hotbar-rows')!.append(...rows.map(item => item.row));
@@ -145,8 +147,9 @@ export function createHotbar(select: (index: number) => void) {
   return (game: Game) => {
     const index = game.equippedSlot;
     const activeRow = game.hotbarRow;
+    const totalRows = game.bag.length / HOTBAR_COLUMNS;
     const visible = game.bag.slice(activeRow * HOTBAR_COLUMNS, (activeRow + 1) * HOTBAR_COLUMNS);
-    const signature = [activeRow, index, game.water, ...visible.map(stack => stack &&
+    const signature = [activeRow, totalRows, index, game.water, ...visible.map(stack => stack &&
       (stack.kind === 'item' ? stack.id + ':' + stackCount(stack) : stack.id))].join('/');
     if (signature === previous) return;
     previous = signature;

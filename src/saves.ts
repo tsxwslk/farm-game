@@ -1,5 +1,6 @@
 import * as z from 'zod';
-import { BAG_SLOTS, CROP_IDS, ENTRIES, HOTBAR_COLUMNS, ITEMS, LIUWAN_ROWS, RECIPES, RESOURCES, SOUTH_PASS, STARTING_TOOLS, STATIONS, TILL_HITS, TOOLS, TRADE, WAREHOUSE_SLOTS, WATER_CAPACITY, type Tool } from './content';
+import { BAG_SLOTS, CROP_IDS, ENTRIES, HOTBAR_COLUMNS, ITEMS, LIUWAN_ROWS, MAX_BAG_SLOTS, RECIPES, RESOURCES, SOUTH_PASS, STARTING_TOOLS, STATIONS,
+  TILL_HITS, TOOLS, TRADE, WAREHOUSE_SLOTS, WATER_CAPACITY, type Tool } from './content';
 import { canTravel, DAY, SAVE_VERSION, type Game } from './game';
 import { count, equippedTool, startingInventory } from './inventory';
 import type { Plot, World } from './scene';
@@ -43,10 +44,17 @@ const previousGame = z.strictObject({
   equippedSlot: whole.max(BAG_SLOTS - 1).nullable(),
   bag: z.array(stack).length(BAG_SLOTS), warehouse: z.array(stack).length(WAREHOUSE_SLOTS),
 });
-const gameSchema = previousGame.extend({
-  schemaVersion: z.literal(SAVE_VERSION),
+const gameV7 = previousGame.extend({
+  schemaVersion: z.literal(7),
   plots: z.array(oldPlot.extend({ crop: z.enum(CROP_IDS).nullable() })),
   commissions: z.strictObject({ radishStockDay: whole, trailFood: z.boolean() }),
+});
+const gameSchema = gameV7.extend({
+  schemaVersion: z.literal(SAVE_VERSION),
+  hotbarRow: whole.max(MAX_BAG_SLOTS / HOTBAR_COLUMNS - 1),
+  equippedSlot: whole.max(MAX_BAG_SLOTS - 1).nullable(),
+  bag: z.array(stack).min(BAG_SLOTS).max(MAX_BAG_SLOTS).refine(slots => slots.length % HOTBAR_COLUMNS === 0),
+  warehouse: z.array(stack).min(WAREHOUSE_SLOTS).refine(slots => slots.length % WAREHOUSE_SLOTS === 0),
 });
 
 const saveSchema = z.strictObject({
@@ -168,6 +176,11 @@ const migrations: Partial<Record<number, (save: unknown, world: World) => unknow
       commissions: { radishStockDay: 0, trailFood: false },
     } };
   },
+  7(value) {
+    const parsed = saveSchema.extend({ game: gameV7 }).safeParse(value);
+    if (!parsed.success) throw new Error('旧存档格式有误。');
+    return { ...parsed.data, game: { ...parsed.data.game, schemaVersion: SAVE_VERSION } };
+  },
 };
 
 export function validateSave(value: unknown, world: World): Save {
@@ -208,6 +221,7 @@ export function validateSave(value: unknown, world: World): Save {
       (!game.submitted && (game.commissions.radishStockDay > 0 || game.commissions.trailFood)) ||
       (game.commissions.trailFood && !game.entries.pakChoi?.lit) ||
       new Set(positions.map(value => value.join(','))).size !== positions.length ||
+      game.hotbarRow >= game.bag.length / HOTBAR_COLUMNS ||
       (game.equippedSlot !== null && (!game.bag[game.equippedSlot] || Math.floor(game.equippedSlot / HOTBAR_COLUMNS) !== game.hotbarRow)) ||
       toolIds.length !== STARTING_TOOLS.length || new Set(toolIds).size !== STARTING_TOOLS.length ||
       Object.entries(game.depleted).some(([id, day]) => !Object.hasOwn(RESOURCES, id) || day > game.day) ||

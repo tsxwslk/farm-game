@@ -1,10 +1,10 @@
 import {
-  COMMISSIONS, CROPS, CROP_IDS, ENTRIES, HOTBAR_COLUMNS, INVENTORY_INFO, ITEMS, KILN_COST, LIUWAN_ROWS, RECIPES, RESOURCES, SOUTH_PASS, STATIONS, TRADE, WATER_CAPACITY,
+  COMMISSIONS, CROPS, CROP_IDS, ENTRIES, HOTBAR_COLUMNS, INVENTORY_INFO, ITEMS, KILN_COST, LIUWAN_ROWS, RECIPES, RESOURCES, SOUTH_PASS, STATIONS, TRADE, WAREHOUSE_SLOTS, WATER_CAPACITY,
   type CommissionId, type EntryId, type Point, type Recipe, type RecipeId, type Station,
 } from './content';
 import {
-  canBuild, canSubmit, canTravel, claimJob, claimPakChoiSeeds, claimSeed, commissionStatus, costs, deliverCommission, hasMaterials, jobMeter, needsSeed,
-  saveSeed, startJob, submit, trade, tradeLimit, warnSale, type Game, type TradeItem,
+  canBuild, canSubmit, canTravel, claimJob, claimPakChoiSeeds, claimSeed, commissionStatus, costs, deliverCommission, expandStorage,
+  hasMaterials, jobMeter, needsSeed, saveSeed, startJob, storageUpgrade, submit, trade, tradeLimit, warnSale, type Game, type TradeItem,
 } from './game';
 import type { World } from './scene';
 import { makeSlotRow, stackIcon } from './hotbar';
@@ -126,16 +126,16 @@ export function bindHotbarItemCard(hotbar: HTMLElement, current: () => Game) {
   return { dismiss, update };
 }
 
-export function inventoryPanel(game: Game, showWarehouse: boolean, source: SlotAddress | null,
+export function inventoryPanel(game: Game, warehouse: { page: number; turn: (page: number) => void } | null, source: SlotAddress | null,
   select: (address: SlotAddress | null) => void, move: (from: SlotAddress, to: SlotAddress) => void,
   equip: (index: number | null) => void, update: (message: string) => void, placement: (station: Station) => void) {
   const storageNames = { bag: '背包', warehouse: '仓库' };
   const layout = element('div', undefined, 'inventory-layout');
-  const grids = element('div', undefined, showWarehouse ? 'storage-grids storage-pair' : 'storage-grids');
+  const grids = element('div', undefined, warehouse ? 'storage-grids storage-pair' : 'storage-grids');
   const card = element('section', undefined, 'item-card');
   card.setAttribute('aria-label', '物品信息');
   card.hidden = true;
-  layout.append(grids, card);
+  layout.append(element('p', '钱袋 ' + game.coins + ' 文', 'sheet-note'), grids, card);
   const desktop = matchMedia('(hover: hover) and (pointer: fine)');
   let chosen = source;
   let displayed: SlotAddress | null = null;
@@ -203,17 +203,41 @@ export function inventoryPanel(game: Game, showWarehouse: boolean, source: SlotA
     showCard(chosen, floating);
   }
 
-  for (const storage of (showWarehouse ? ['warehouse', 'bag'] : ['bag']) as Storage[]) {
+  for (const storage of (warehouse ? ['warehouse', 'bag'] : ['bag']) as Storage[]) {
     const section = element('section', undefined, 'inventory-grid');
     section.setAttribute('aria-label', storageNames[storage] + '格子');
     const slots = game[storage];
     const heading = element('h3', storageNames[storage] + ' ' + slots.filter(Boolean).length + ' / ' + slots.length, 'inventory-heading');
-    section.append(heading);
-    for (let start = 0; start < slots.length; start += HOTBAR_COLUMNS) {
+    const toolbar = element('div', undefined, 'inventory-toolbar');
+    toolbar.append(heading);
+    const offer = storageUpgrade(game, storage);
+    if (offer) {
+      toolbar.append(button('扩至 ' + offer.slots + ' 格 · ' + offer.price + ' 文',
+        () => update(expandStorage(game, storage, offer.slots)), game.coins < offer.price));
+    } else {
+      toolbar.append(element('span', '已扩至上限', 'sheet-note'));
+    }
+    section.append(toolbar);
+    const page = storage === 'warehouse' ? warehouse : null;
+    const first = page ? page.page * WAREHOUSE_SLOTS : 0;
+    const end = page ? first + WAREHOUSE_SLOTS : slots.length;
+    for (let start = first; start < end; start += HOTBAR_COLUMNS) {
       const row = makeSlotRow(storage, start, address => inspect(address), storage === 'bag');
       row.row.classList.toggle('active-inventory-row', storage === 'bag' && start / HOTBAR_COLUMNS === game.hotbarRow);
       row.update(game, null, true);
       section.append(row.row);
+    }
+    if (page && slots.length > WAREHOUSE_SLOTS) {
+      const pages = slots.length / WAREHOUSE_SLOTS;
+      const pager = element('div', undefined, 'warehouse-pages');
+      pager.setAttribute('role', 'group');
+      pager.setAttribute('aria-label', '仓库分页');
+      const previous = button('上一页', () => page.turn(page.page - 1), page.page === 0);
+      const next = button('下一页', () => page.turn(page.page + 1), page.page === pages - 1);
+      previous.dataset.direction = 'previous';
+      next.dataset.direction = 'next';
+      pager.append(previous, element('span', '第 ' + (page.page + 1) + ' / ' + pages + ' 页'), next);
+      section.append(pager);
     }
     grids.append(section);
   }
@@ -234,7 +258,7 @@ export function inventoryPanel(game: Game, showWarehouse: boolean, source: SlotA
     if (card.hasAttribute('popover')) showCard(null);
   }, { passive: true });
   if (source) queueMicrotask(() => { if (layout.isConnected) showCard(source); });
-  if (showWarehouse) return [layout];
+  if (warehouse) return [layout];
   const crafting = element('ul', undefined, 'sheet-list');
   crafting.append(
     listRow('盐灶 · ' + costs(KILN_COST),

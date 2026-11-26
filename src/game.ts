@@ -1,13 +1,14 @@
 import {
-  COMMISSIONS, CROPS, CROP_IDS, ENTRIES, ITEMS, KILN_COST, RECIPES, RESOURCES, SOUTH_PASS, STATIONS, STATION_ITEMS, TILL_HITS, TOOLS, TRADE, WATER_CAPACITY,
+  BAG_SLOTS, BAG_UPGRADE_PRICES, COMMISSIONS, CROPS, CROP_IDS, ENTRIES, HOTBAR_COLUMNS, ITEMS, KILN_COST, RECIPES, RESOURCES, SOUTH_PASS, STATIONS,
+  STATION_ITEMS, TILL_HITS, TOOLS, TRADE, WAREHOUSE_SLOTS, WAREHOUSE_UPGRADE, WATER_CAPACITY,
   type CommissionId, type EntryId, type Item, type Point, type Recipe, type RecipeId, type Station, type Tool,
 } from './content';
 import type { CropStage, Plot, Target, World } from './scene';
-import { batchesFor, consume, count, equippedStack, equippedTool, hasRoom, receive, startingInventory, type Stack } from './inventory';
+import { batchesFor, consume, count, equippedStack, equippedTool, hasRoom, receive, startingInventory, type Stack, type Storage } from './inventory';
 
 export const DAY = 1080;
 export const START: Point = [11, 6];
-export const SAVE_VERSION = 7;
+export const SAVE_VERSION = 8;
 export interface Entry {
   lit: boolean;
   deadline: number | null;
@@ -391,6 +392,29 @@ export function renewResources(game: Game, world: World) {
 }
 
 export type TradeItem = keyof typeof TRADE.sell | keyof typeof TRADE.buy;
+export function storageUpgrade(game: Game, storage: Storage) {
+  const slots = game[storage].length;
+  if (storage === 'bag') {
+    const price = BAG_UPGRADE_PRICES[(slots - BAG_SLOTS) / HOTBAR_COLUMNS];
+    return price === undefined ? null : { slots: slots + HOTBAR_COLUMNS, price };
+  }
+  return {
+    slots: slots + WAREHOUSE_SLOTS,
+    price: WAREHOUSE_UPGRADE.firstPrice + (slots / WAREHOUSE_SLOTS - 1) * WAREHOUSE_UPGRADE.priceStep,
+  };
+}
+
+export function expandStorage(game: Game, storage: Storage, quotedSlots: number) {
+  const offer = storageUpgrade(game, storage);
+  if (game.review || !offer || quotedSlots !== offer.slots) return '当前无法扩容。';
+  if (game.coins < offer.price) return '钱袋里的文不足。';
+  const slots = game[storage];
+  slots.push(...Array<null>(offer.slots - slots.length).fill(null));
+  game.coins -= offer.price;
+  game.account.expenses += offer.price;
+  return record(game, (storage === 'bag' ? '背包' : '仓库') + '已扩至 ' + offer.slots + ' 格，支出 ' + offer.price + ' 文。');
+}
+
 export function tradeLimit(game: Game, item: TradeItem) {
   if (!game.submitted && (item === 'pakChoi' || item === 'pakChoiPickle')) return 0;
   if (item !== 'seeds') return count(game, item);
