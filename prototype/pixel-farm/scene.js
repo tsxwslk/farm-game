@@ -43,6 +43,7 @@ window.startLiuwanScene = function ({layout, jobMeter, assetUrl = file => file, 
     cottage: D.cottage,
     crate: {...D.crate, contact: 28},
     seedBox: {...D.crate, contact: 28},
+    kiln: {file: 'assets/kiln/salt-stove-scene-48x48.png', anchor: [24, 44], contact: 25},
     jar: {...D.jar, contact: 16},
     willow: {file: 'assets/willow/willow-imported.png', anchor: [48, 122], contact: 13},
     salt: {file: 'assets/rock/rock-ore-salt.png', anchor: [24, 44], contact: 28},
@@ -71,7 +72,7 @@ window.startLiuwanScene = function ({layout, jobMeter, assetUrl = file => file, 
     at('willow', 15.05, 3.1), at('willow', 17.9, 4.1),
     at('willow', 26.95, 2.45), at('willow', 24.85, 4.25),
     at('willow', 25.45, 6.25), at('willow', 23.85, 8.2),
-    at('willow', 26.25, 12.45), at('willow', 24.65, 14.45),
+    at('willow', 26.95, 12.95, {scale: .625}), at('willow', 24.65, 14.45),
     at('willow', 25.25, 16.2), at('willow', 23.95, 18.2),
     at('willow', 21.85, 19.3, {forgotten: true}),
     at('jar', 19.9, 16.5, {forgotten: true}),
@@ -83,6 +84,7 @@ window.startLiuwanScene = function ({layout, jobMeter, assetUrl = file => file, 
     ...Object.entries(layout.resources).map(([id, resource]) =>
       at(resource.actor, resource.tile[0] + .5, resource.tile[1] + .62, {id, resource})),
   ] : demoActors;
+  const mudPatches = fixedActors.filter(actor => actor.kind === 'clay');
   let actors = fixedActors;
 
   function bedColor(cells, x, y) {
@@ -130,20 +132,7 @@ window.startLiuwanScene = function ({layout, jobMeter, assetUrl = file => file, 
       scene.fillStyle = color;
       scene.fillRect(left, top, width, height);
     };
-    if (kind === 'kiln') {
-      rect('#665949', -16, -20, 33, 20);
-      rect('#aa8b6d', -15, -19, 29, 4);
-      rect('#8b6f54', -16, -6, 33, 4);
-      rect('#3d4139', -15, -24, 31, 6);
-      rect('#798078', -12, -26, 25, 4);
-      rect('#d1b898', -6, -15, 13, 11);
-      rect('#50382a', -4, -13, 9, 9);
-    } else if (kind === 'clay') {
-      const exposed = !game.depleted[actor.id];
-      rect(exposed ? '#978676' : '#a6957f', -12, -4, 24, 8);
-      rect(exposed ? '#7d6d60' : '#94816b', -8, -2, 15, 4);
-      rect('#aa9680', -7, 3, 12, 2);
-    } else if (kind === 'mark') {
+    if (kind === 'mark') {
       const label = game.submitted ? actor.text : actor.hint;
       const width = label.length * 10 + 8;
       rect('#654d36', -2, -22, 4, 22);
@@ -250,7 +239,7 @@ window.startLiuwanScene = function ({layout, jobMeter, assetUrl = file => file, 
     const {remaining, elapsed, duration} = jobMeter(job, game.minute);
     if (actor.kind === 'kiln' && !job.ready && !reducedMotion.matches) {
       scene.fillStyle = phase % 5 < 3 ? '#ffb567' : '#d98145';
-      scene.fillRect(x - 3, y - 8, 7, 3);
+      scene.fillRect(x - 7, y - 8, 7, 3);
       for (let i = 0; i < 3; i++) {
         const rise = (phase + i * 6) % 18;
         scene.globalAlpha = (1 - rise / 18) * .7;
@@ -278,6 +267,11 @@ window.startLiuwanScene = function ({layout, jobMeter, assetUrl = file => file, 
     drawBeds(game);
     scene.drawImage(groundLayer.canvas, view.x, view.y, view.width, view.height, view.x, view.y, view.width, view.height);
     if (layout && !reducedMotion.matches) drawWater(phase);
+    for (const patch of mudPatches) {
+      const [col, row] = patch.resource.tile;
+      const image = game.depleted[patch.id] ? images.mudDug : images.mud;
+      scene.drawImage(image, col * TILE, row * TILE);
+    }
 
     const tileX = Math.floor(position[0] + .5), tileY = Math.floor(position[1] + .5);
     const x = Math.round((position[0] + .5) * TILE);
@@ -285,7 +279,7 @@ window.startLiuwanScene = function ({layout, jobMeter, assetUrl = file => file, 
     const plot = E.plotAt(world, (tileX + .5) * TILE, (tileY + .5) * TILE);
     const level = plot && game.plots[plot.id].tilled ? BED_HEIGHT : 0;
     const person = {kind: 'figure', x, y, level};
-    const visible = actors.filter(actor => (game.submitted || !actor.forgotten) &&
+    const visible = actors.filter(actor => actor.kind !== 'clay' && (game.submitted || !actor.forgotten) &&
       (layout || actor.kind !== 'salt' || game.minute >= game.mineReady) &&
       actor.x + 128 > view.x && actor.x - 128 < view.x + view.width &&
       actor.y + 32 > view.y && actor.y - 128 < view.y + view.height);
@@ -313,7 +307,9 @@ window.startLiuwanScene = function ({layout, jobMeter, assetUrl = file => file, 
         continue;
       }
       const image = images[kind];
-      const x = actor.x - sprite.anchor[0], y = actor.y - sprite.anchor[1] - actor.level;
+      const scale = actor.scale ?? 1;
+      const x = actor.x - Math.round(sprite.anchor[0] * scale);
+      const y = actor.y - Math.round(sprite.anchor[1] * scale) - actor.level;
       if (sprite.frameSize) {
         const size = sprite.frameSize;
         const column = E.hash(actor.x, actor.y) % sprite.frames;
@@ -321,7 +317,7 @@ window.startLiuwanScene = function ({layout, jobMeter, assetUrl = file => file, 
       } else if (layout && kind === 'figure') {
         drawFigure(actor, image, x, y, motion);
       } else {
-        scene.drawImage(image, x, y);
+        scene.drawImage(image, x, y, image.width * scale, image.height * scale);
       }
     }
     if (layout && game.action) {
@@ -375,12 +371,9 @@ window.startLiuwanScene = function ({layout, jobMeter, assetUrl = file => file, 
       scene.strokeStyle = placement.allowed ? '#eef8ba' : '#f6bab6';
       scene.strokeRect(px + .5, py + .5, TILE - 1, TILE - 1);
       const ghost = at(placement.kind, placement.tile[0] + .5, placement.tile[1] + .6);
+      const {anchor} = sprites[ghost.kind];
       scene.globalAlpha = .6;
-      if (placement.kind === 'jar') {
-        scene.drawImage(images.jar, ghost.x - D.jar.anchor[0], ghost.y - D.jar.anchor[1]);
-      } else {
-        pixelProp(ghost, game);
-      }
+      scene.drawImage(images[ghost.kind], ghost.x - anchor[0], ghost.y - anchor[1]);
       scene.globalAlpha = 1;
     }
   }
@@ -530,6 +523,11 @@ window.startLiuwanScene = function ({layout, jobMeter, assetUrl = file => file, 
     }
     for (const target of targets) {
       if (!target.actor) continue;
+      if (target.actor === 'clay') {
+        const [col, row] = target.tile;
+        if (Math.floor(x / TILE) === col && Math.floor(y / TILE) === row) return target;
+        continue;
+      }
       const actor = actors.find(item => item.kind === target.actor && !item.forgotten &&
         (target.kind !== 'resource' || item.id === target.id));
       if (!actor) continue;
@@ -537,12 +535,11 @@ window.startLiuwanScene = function ({layout, jobMeter, assetUrl = file => file, 
       const image = images[actor.kind];
       if (sprite) {
         const rock = actor.kind === 'salt' || actor.kind === 'stone';
-        const inset = rock ? 7 : actor.kind === 'jar' ? 9 : 4;
+        const inset = rock ? 7 : actor.kind === 'jar' ? 9 : actor.kind === 'kiln' ? 8 : 4;
+        const topInset = rock ? 23 : actor.kind === 'willow' ? 45 : actor.kind === 'kiln' ? 14 : 6;
         const left = actor.x - sprite.anchor[0] + inset;
-        const top = actor.y - sprite.anchor[1] + (rock ? 23 : actor.kind === 'willow' ? 45 : 6);
+        const top = actor.y - sprite.anchor[1] + topInset;
         if (x >= left && x < left + (sprite.frameSize ?? image.width) - inset * 2 && y >= top && y <= actor.y) return target;
-      } else if (actor.kind === 'clay') {
-        if (Math.abs(x - actor.x) <= 15 && Math.abs(y - actor.y) <= 10) return target;
       } else if (x >= actor.x - 16 && x <= actor.x + 17 && y >= actor.y - 26 && y <= actor.y) {
         return target;
       }
@@ -552,6 +549,10 @@ window.startLiuwanScene = function ({layout, jobMeter, assetUrl = file => file, 
   }
 
   const files = {...ground.files, ...cropFiles};
+  if (mudPatches.length) {
+    files.mud = 'assets/mud/bank-mud-32x32.png';
+    files.mudDug = 'assets/mud/bank-mud-dug-32x32.png';
+  }
   for (const [key, sprite] of Object.entries(sprites)) files[key] = sprite.file;
   for (const [key, shadow] of Object.entries(D.shadows)) {
     if (sprites[key]) files[key + 'Shadow'] = shadow.file;

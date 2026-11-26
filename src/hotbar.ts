@@ -6,21 +6,17 @@ type Pixel = [color: string, x: number, y: number, width: number, height: number
 
 const wood = '#8e5c3c';
 const lightWood = '#d1a26b';
-const iron = '#92aaa8';
-const shine = '#d8e3cf';
 const shadow = '#465650';
-const handle: Pixel[] = [
-  [wood, 3, 12, 3, 3], [wood, 5, 10, 3, 3], [wood, 7, 8, 3, 3], [wood, 9, 6, 3, 3],
-  [lightWood, 4, 12, 1, 2], [lightWood, 6, 10, 2, 1], [lightWood, 8, 8, 2, 1],
-];
+const iconFiles: Partial<Record<Tool | Item, string>> = {
+  hoe: 'assets/tools/hoe-16x16.png',
+  pick: 'assets/tools/pick-16x16.png',
+  can: 'assets/tools/can-16x16.png',
+  axe: 'assets/tools/axe-16x16.png',
+  rod: 'assets/tools/rod-16x16.png',
+  radish: 'assets/cherry-radish/05-inventory.png',
+  crock: 'assets/jar/jar-crock-48x48.png',
+};
 const pixels: Partial<Record<Tool | Item, Pixel[]>> = {
-  hoe: [...handle, [shadow, 8, 4, 6, 2], [iron, 8, 5, 6, 2], [iron, 12, 6, 3, 3], [shine, 9, 4, 4, 1]],
-  pick: [...handle, [shadow, 7, 3, 5, 2], [iron, 7, 4, 7, 2], [iron, 12, 6, 2, 2], [iron, 13, 8, 2, 2], [shine, 8, 4, 4, 1]],
-  axe: [...handle, [shadow, 8, 3, 5, 7], [iron, 7, 4, 5, 5], [shine, 6, 4, 2, 4], [lightWood, 11, 3, 2, 2]],
-  can: [[shadow, 2, 6, 5, 5], [iron, 3, 7, 3, 3], [shadow, 6, 5, 5, 9], [iron, 6, 7, 5, 6],
-    ['#6d9395', 7, 8, 3, 5], [shine, 7, 6, 3, 1], [iron, 10, 9, 3, 2], [iron, 12, 7, 2, 3], [shine, 13, 6, 2, 2]],
-  rod: [...handle, [lightWood, 10, 4, 2, 3], [lightWood, 11, 2, 2, 3],
-    [shine, 13, 3, 1, 6], [iron, 12, 9, 2, 2], ['#cb7250', 12, 9, 1, 1]],
   seeds: [[wood, 4, 2, 8, 12], ['#d1ab72', 5, 3, 6, 10], ['#e8cb91', 5, 4, 6, 1],
     ['#a75957', 7, 7, 3, 4], ['#567749', 8, 6, 2, 1], ['#e6a180', 7, 7, 1, 2]],
   wood: [[wood, 2, 7, 11, 5], [lightWood, 3, 7, 8, 2], [wood, 4, 5, 10, 3], [lightWood, 5, 4, 7, 2],
@@ -34,18 +30,20 @@ const pixels: Partial<Record<Tool | Item, Pixel[]>> = {
     ['#e9b3a0', 7, 8, 3, 1], ['#ae5856', 7, 10, 2, 2]],
 };
 
-function icon(slot: Tool | Item) {
-  if (slot === 'radish' || slot === 'crock') {
+function icon(stack: Stack) {
+  const file = iconFiles[stack.id];
+  if (file) {
     const image = document.createElement('img');
-    image.src = assetUrl(slot === 'radish' ? 'assets/cherry-radish/05-inventory.png' : 'assets/jar/jar-crock-48x48.png');
+    image.src = assetUrl(file);
     image.alt = '';
+    if (stack.kind === 'tool') image.className = 'tool-icon';
     return image;
   }
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = 16;
   canvas.setAttribute('aria-hidden', 'true');
   const context = canvas.getContext('2d')!;
-  for (const [color, x, y, width, height] of pixels[slot] ?? []) {
+  for (const [color, x, y, width, height] of pixels[stack.id] ?? []) {
     context.fillStyle = color;
     context.fillRect(x, y, width, height);
   }
@@ -80,7 +78,7 @@ function slotButton(address: SlotAddress, select: (address: SlotAddress) => void
     const stack = game[storage][index];
     const id = stack?.id ?? null;
     if (id !== previous) {
-      picture.replaceChildren(...(id ? [icon(id)] : []));
+      picture.replaceChildren(...(stack ? [icon(stack)] : []));
       previous = id;
     }
     const label = stack ? describeSlot(game, stack) : '空格';
