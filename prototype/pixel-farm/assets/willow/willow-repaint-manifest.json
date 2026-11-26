@@ -1,0 +1,41 @@
+{
+  "size": [
+    96,
+    128
+  ],
+  "anchor": [
+    48,
+    122
+  ],
+  "bbox": [
+    10,
+    11,
+    87,
+    122
+  ],
+  "width": 78,
+  "height": 112,
+  "opaque": 5480,
+  "leaf_px": 4775,
+  "bark_px": 705,
+  "colors": 10,
+  "components": 1,
+  "contact_run": 9,
+  "bark_rows": 61,
+  "leaf_shares": {
+    "bright": 0.073,
+    "lit": 0.228,
+    "mid": 0.211,
+    "overlap": 0.16,
+    "deep": 0.266,
+    "rim": 0.061
+  },
+  "cleanup": {
+    "largest_component": 5316,
+    "smooth_dropped": 11,
+    "smooth_added": 90,
+    "carved": 0,
+    "removed_isolated": 0,
+    "filled_holes": 1
+  }
+}

@@ -61,7 +61,7 @@ const legacySave = saveSchema.extend({
   }),
 });
 
-const migrations: Partial<Record<number, (save: unknown) => unknown>> = {
+const migrations: Partial<Record<number, (save: unknown, world: World) => unknown>> = {
   1(value) {
     const parsed = legacySave.safeParse(value);
     if (!parsed.success) throw new Error('旧存档格式有误。');
@@ -69,14 +69,46 @@ const migrations: Partial<Record<number, (save: unknown) => unknown>> = {
     if (Object.keys(oldBag).length > 8) throw new Error('旧存档的背包容量有误。');
     const inventory = startingInventory(!previous.chestOpened);
     for (const [id, stack] of Object.entries(oldBag)) {
-      const index = legacySlots.indexOf(id as keyof typeof ITEMS);
+      const index = legacySlots.findIndex(slot => slot === id);
+      if (index < 0) throw new Error('旧存档中有未知物品。');
       inventory.bag[index] = { kind: 'item', id: id as keyof typeof ITEMS, batches: stack };
     }
     const index = hotbarSlot ?? legacySlots.indexOf(tool === 'hand' && selectedSeeds ? 'seeds' : tool);
     return {
       ...parsed.data, game: {
-        ...previous, ...inventory, schemaVersion: SAVE_VERSION, hotbarRow: Math.floor(index / HOTBAR_COLUMNS),
+        ...previous, ...inventory, schemaVersion: 2, hotbarRow: Math.floor(index / HOTBAR_COLUMNS),
         equippedSlot: inventory.bag[index] ? index : null,
+      },
+    };
+  },
+  2(value, world) {
+    const parsed = saveSchema.extend({ game: gameSchema.extend({ schemaVersion: z.literal(2) }) }).safeParse(value);
+    if (!parsed.success || parsed.data.game.plots.length !== 12) throw new Error('旧存档格式有误。');
+    const { game } = parsed.data;
+    return {
+      ...parsed.data,
+      game: {
+        ...game, schemaVersion: 3,
+        plots: world.plots.map(({ id }) => game.plots[id] ?? { tilled: false, planted: null, watered: null }),
+        action: game.action?.key.startsWith('plot-') ? game.action : null,
+      },
+    };
+  },
+  3(value) {
+    const parsed = saveSchema.extend({ game: gameSchema.extend({ schemaVersion: z.literal(3) }) }).safeParse(value);
+    if (!parsed.success) throw new Error('旧存档格式有误。');
+    const { game } = parsed.data;
+    const resourceIds: Record<string, string> = { 'north-willow': 'north-oak', 'east-willow': 'east-oak' };
+    const renameResource = (key: string) => Object.hasOwn(resourceIds, key) ? resourceIds[key] : key;
+    const renameProgress = (progress: Record<string, number>) =>
+      Object.fromEntries(Object.entries(progress).map(([key, count]) => [renameResource(key), count]));
+    return {
+      ...parsed.data,
+      game: {
+        ...game, schemaVersion: 4,
+        strikes: renameProgress(game.strikes),
+        depleted: renameProgress(game.depleted),
+        action: game.action && { ...game.action, key: renameResource(game.action.key) },
       },
     };
   },
@@ -89,7 +121,7 @@ export function validateSave(value: unknown, world: World): Save {
   for (let current = version ?? SAVE_VERSION; current < SAVE_VERSION; current++) {
     const migrate = migrations[current];
     if (!migrate) throw new Error('目前无法读取这份旧版本存档。');
-    migrated = migrate(migrated);
+    migrated = migrate(migrated, world);
   }
   const parsed = saveSchema.safeParse(migrated);
   if (!parsed.success) throw new Error('存档格式有误。');

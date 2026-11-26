@@ -15,6 +15,8 @@ const iconFiles: Partial<Record<Tool | Item, string>> = {
   rod: 'assets/tools/rod-16x16.png',
   radish: 'assets/cherry-radish/05-inventory.png',
   crock: 'assets/jar/jar-crock-48x48.png',
+  kiln: 'assets/kiln/salt-stove-inventory-16x16.png',
+  crucian: 'assets/fish/crucian-32x32.png',
 };
 const pixels: Partial<Record<Tool | Item, Pixel[]>> = {
   seeds: [[wood, 4, 2, 8, 12], ['#d1ab72', 5, 3, 6, 10], ['#e8cb91', 5, 4, 6, 1],
@@ -28,13 +30,17 @@ const pixels: Partial<Record<Tool | Item, Pixel[]>> = {
   salt: [[shadow, 2, 9, 12, 4], ['#a99c83', 3, 8, 10, 4], ['#e8dcca', 4, 7, 8, 3], ['#fbefdb', 6, 5, 4, 3]],
   pickle: [[wood, 5, 4, 6, 10], ['#e7c17c', 5, 4, 6, 2], ['#ce8b65', 6, 7, 4, 6],
     ['#e9b3a0', 7, 8, 3, 1], ['#ae5856', 7, 10, 2, 2]],
+  crucian: [[shadow, 3, 6, 10, 5], ['#a3b0a7', 5, 5, 7, 7], ['#cbd0b5', 6, 7, 7, 3],
+    ['#74867b', 2, 5, 3, 7], [shadow, 11, 7, 1, 1]],
+  fishSoup: [[wood, 2, 8, 12, 4], ['#dc9e5f', 3, 7, 10, 3], ['#ede1b2', 4, 8, 8, 2], ['#b68251', 4, 12, 8, 2]],
 };
 
 function icon(stack: Stack) {
   const file = iconFiles[stack.id];
-  if (file) {
+  const url = file && assetUrl(file);
+  if (url) {
     const image = document.createElement('img');
-    image.src = assetUrl(file);
+    image.src = url;
     image.alt = '';
     if (stack.kind === 'tool') image.className = 'tool-icon';
     return image;

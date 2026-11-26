@@ -1,0 +1,62 @@
+{
+  "size": [
+    96,
+    128
+  ],
+  "anchor": [
+    48,
+    122
+  ],
+  "view": "固定俯视微倾，左上受光",
+  "source": "oak.lua（Aseprite 索引色）",
+  "palette": {
+    "leaf": [
+      "#24301E",
+      "#354927",
+      "#4A6432",
+      "#68853F",
+      "#8FA855",
+      "#AFC46C"
+    ],
+    "bark": [
+      "#33251A",
+      "#4C3A2B",
+      "#6B5340",
+      "#7E674E"
+    ]
+  },
+  "bbox": [
+    10,
+    4,
+    84,
+    122
+  ],
+  "canopy_bbox": [
+    10,
+    4,
+    84,
+    90
+  ],
+  "opaque": 5578,
+  "leaf_px": 5080,
+  "bark_px": 498,
+  "leaf_share": {
+    "hi_lit": 0.438,
+    "deep": 0.154
+  },
+  "low_row_runs": [
+    1,
+    1,
+    1
+  ],
+  "trunk_foot_rows": 32,
+  "aseprite": {
+    "magic_ok": true,
+    "frames": 1,
+    "size": [
+      96,
+      128
+    ],
+    "color_depth": 8
+  }
+}

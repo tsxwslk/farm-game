@@ -1,0 +1,55 @@
+{
+  "size": [
+    48,
+    48
+  ],
+  "anchor": [
+    24,
+    44
+  ],
+  "view": "固定俯视微倾，左上受光",
+  "source": "stump.lua（Aseprite 索引色）",
+  "palette": {
+    "bark": [
+      "#33251A",
+      "#4C3A2B",
+      "#6B5340",
+      "#7E674E"
+    ],
+    "face": [
+      "#8A7458",
+      "#AE9973",
+      "#C9B48C",
+      "#DDCBA6"
+    ],
+    "broken": [
+      "#7A5F44"
+    ]
+  },
+  "bbox": [
+    6,
+    27,
+    39,
+    44
+  ],
+  "visible": [
+    34,
+    18
+  ],
+  "aspect": 1.89,
+  "opaque": 476,
+  "contact_run": 18,
+  "face_ratio": 0.282,
+  "bark_ratio": 0.718,
+  "iou_with_rock": 0.715,
+  "top_flatness": 0.706,
+  "aseprite": {
+    "magic_ok": true,
+    "frames": 1,
+    "size": [
+      48,
+      48
+    ],
+    "color_depth": 8
+  }
+}

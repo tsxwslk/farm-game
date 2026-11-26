@@ -1,4 +1,4 @@
-import { type Game, formatClock, newGame } from './game';
+import { type Game, formatClock, newGame, SAVE_VERSION } from './game';
 import { button, element, node } from './panels';
 import { openSaves, snapshot, validateSave, type Save } from './saves';
 import type { Scene } from './scene';
@@ -22,41 +22,40 @@ function errorText(error: unknown) {
 
 export function createSaveControls(scene: Scene, body: HTMLElement, current: () => Game,
   restore: (game: Game) => void, visible: () => boolean, report: (message: string) => void) {
-  const { world, targets, blocked, setStations, canPlace } = scene;
+  const { world, blocked, setStations, canPlace } = scene;
   const { passable } = window.LiuwanGame;
-  const chest = targets.find(target => target.kind === 'chest');
   const picker = node<HTMLInputElement>('save-file');
   let store: Awaited<ReturnType<typeof openSaves>> | undefined;
   let gameId = newId();
   let busy = false;
 
-  function relocateFromChest(game: Game) {
-    if (!chest?.tile) return;
-    const [chestX, chestY] = chest.tile;
-    const atChest = ([x, y]: Point) => x === chestX && y === chestY;
-    if (atChest(game.position)) {
-      const landing = chest.points.find(point => passable(world, blocked, ...point));
-      if (!landing) throw new Error('货箱周围没有可恢复的角色位置。');
+  function relocateForNewMap(game: Game) {
+    const tiles = world.cells.map<Point>((_, index) => [index % world.cols, Math.floor(index / world.cols)]);
+    const nearest = ([ox, oy]: Point, available: (tile: Point) => boolean) => {
+      const distance = ([x, y]: Point) => Math.abs(x - ox) + Math.abs(y - oy);
+      return tiles.slice().sort((a, b) => distance(a) - distance(b)).find(available);
+    };
+    if (!passable(world, blocked, ...game.position)) {
+      const landing = nearest(game.position, tile => passable(world, blocked, ...tile));
+      if (!landing) throw new Error('地图上没有可恢复的角色位置。');
       game.position = landing;
       game.action = null;
     }
     for (const [kind, point] of Object.entries(game.stations) as [Station, Point][]) {
-      if (!atChest(point)) continue;
-      const distance = ([x, y]: Point) => Math.abs(x - chestX) + Math.abs(y - chestY);
-      const nearby = world.cells.map<Point>((_, index) => [index % world.cols, Math.floor(index / world.cols)])
-        .sort((a, b) => distance(a) - distance(b));
-      const space = nearby.find(tile => canPlace(game, kind, tile));
-      if (!space) throw new Error('货箱附近没有可恢复的设施位置。');
+      if (canPlace(game, kind, point)) continue;
+      const space = nearest(point, tile => canPlace(game, kind, tile));
+      if (!space) throw new Error('地图上没有可恢复的设施位置。');
       game.stations[kind] = space;
       setStations(game);
     }
   }
 
   function check(data: unknown) {
+    const version = (data as Partial<Save> | null)?.game?.schemaVersion;
     const save = validateSave(data, world);
     try {
       setStations(save.game);
-      relocateFromChest(save.game);
+      if (typeof version === 'number' && version < SAVE_VERSION) relocateForNewMap(save.game);
       for (const [kind, point] of Object.entries(save.game.stations) as [Station, Point][]) {
         if (!canPlace(save.game, kind, point)) throw new Error('存档里的设施位置不可用。');
       }
@@ -123,7 +122,7 @@ export function createSaveControls(scene: Scene, body: HTMLElement, current: () 
     }
     try {
       const saves = (await store.list()).flatMap(row => {
-        try { return [validateSave(row, world)]; } catch { return []; }
+        try { return [check(row)]; } catch { return []; }
       }).sort((a, b) => b.savedAt.localeCompare(a.savedAt));
       for (const save of saves) {
         const active = save.id === gameId;

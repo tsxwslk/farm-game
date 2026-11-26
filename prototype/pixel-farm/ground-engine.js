@@ -24,7 +24,7 @@
     return result;
   }
   function createWorld({untouchedFields = false} = {}) {
-    const cols = 34, rows = 20;
+    const cols = untouchedFields ? 48 : 34, rows = untouchedFields ? 30 : 20;
     const cells = Array(cols * rows).fill('grass');
     function rect(x, y, width, height, kind) {
       for (let row = y; row < y + height; row++) {
@@ -37,28 +37,55 @@
       }
     }
     courtyard(3, [[4, 8], [3, 10], [3, 11], [4, 10]]);
-    courtyard(3, [[20, 21], [19, 22], [19, 22], [20, 21]]);
-    courtyard(15, [[19, 20], [18, 21], [18, 22], [19, 22]]);
+    if (!untouchedFields) {
+      courtyard(3, [[20, 21], [19, 22], [19, 22], [20, 21]]);
+      courtyard(15, [[19, 20], [18, 21], [18, 22], [19, 22]]);
+    }
 
     rect(0, 11, 24, 1, 'path');
     rect(11, 5, 1, 7, 'path');
     rect(11, 8, 3, 1, 'path');
     rect(13, 8, 1, 4, 'path');
-    rect(16, 6, 1, 6, 'path');
-    rect(16, 6, 6, 1, 'path');
-    rect(21, 5, 1, 2, 'path');
-    rect(23, 10, 3, 1, 'path');
-    rect(23, 10, 1, 2, 'path');
-    rect(17, 11, 1, 5, 'path');
-    rect(17, 15, 3, 1, 'path');
-    rect(21, 16, 1, 4, 'path');
-    if (!untouchedFields) {
+    if (untouchedFields) {
+      courtyard(3, [[34, 36], [33, 37], [33, 38], [34, 38]]);
+      rect(14, 6, 1, 6, 'path');
+      rect(14, 6, 10, 1, 'path');
+      rect(23, 6, 1, 3, 'path');
+      rect(23, 8, 9, 1, 'path');
+      rect(31, 6, 1, 3, 'path');
+      rect(31, 6, 7, 1, 'path');
+      rect(36, 6, 1, 5, 'path');
+      rect(34, 10, 3, 1, 'path');
+      rect(34, 10, 1, 3, 'path');
+      rect(21, 11, 1, 3, 'path');
+      rect(21, 13, 11, 1, 'path');
+      rect(31, 12, 4, 1, 'path');
+      rect(25, 13, 1, 4, 'path');
+      rect(25, 16, 4, 1, 'path');
+      rect(27, 16, 1, 4, 'path');
+      rect(27, 19, 3, 1, 'path');
+      rect(29, 19, 1, 2, 'path');
+      rect(29, 20, 4, 1, 'path');
+      rect(11, 11, 1, 9, 'path');
+      rect(5, 19, 7, 1, 'path');
+      rect(5, 19, 1, 7, 'path');
+    } else {
+      rect(16, 6, 1, 6, 'path');
+      rect(16, 6, 6, 1, 'path');
+      rect(21, 5, 1, 2, 'path');
+      rect(23, 10, 3, 1, 'path');
+      rect(23, 10, 1, 2, 'path');
+      rect(17, 11, 1, 5, 'path');
+      rect(17, 15, 3, 1, 'path');
+      rect(21, 16, 1, 4, 'path');
       rect(3, 7, 8, 4, 'dry');
       rect(6, 14, 8, 2, 'dry');
     }
 
-    const shoreColumns = [29, 29, 28, 28, 27, 27, 26, 26, 26, 26,
-                          27, 27, 28, 28, 28, 27, 27, 26, 25, 24];
+    const shoreColumns = untouchedFields
+      ? [43, 43, 42, 41, 41, 40, 41, 41, 40, 39, 38, 36, 35, 33, 31,
+         30, 29, 29, 30, 31, 33, 34, 34, 35, 36, 37, 38, 40, 41, 42]
+      : [29, 29, 28, 28, 27, 27, 26, 26, 26, 26, 27, 27, 28, 28, 28, 27, 27, 26, 25, 24];
     const bankStarts = shoreColumns.map((shore, y) => {
       const north = shoreColumns[y - 1] ?? shore;
       const south = shoreColumns[y + 1] ?? shore;
@@ -91,7 +118,9 @@
       return {grass, water};
     });
     const plots = [];
-    for (const [left, top, height] of [[3, 7, 2], [6, 14, 1]]) {
+    const fields = [[3, 7, 2], [6, 14, 1]];
+    if (untouchedFields) fields.push([6, 21, 2]);
+    for (const [left, top, height] of fields) {
       for (let row = 0; row < height; row++) {
         for (let col = 0; col < 4; col++) {
           plots.push({id: plots.length, col, row, x: (left + col * 2) * TILE,
@@ -107,7 +136,14 @@
       {id: 'bank', label: '河岸', x: 26.65, y: 10.45},
       {id: 'exit', label: '山道出口', x: 21.5, y: 18.85},
     ];
-    return {cols, rows, cells, plots, surfaces, shoreColumns, bankStarts, sites};
+    const landmarks = [
+      {id: 'farm', label: '起步菜畦', tile: [6, 8], mark: '田'},
+      {id: 'woods', label: '北侧林缘', tile: [21, 6], mark: '林'},
+      {id: 'bank', label: '柳湾河 · 取水岸', tile: [31, 13], mark: '水'},
+      {id: 'expansion', label: '南侧扩垦地', tile: [9, 23], mark: '地'},
+    ];
+    const fishing = {water: [33, 20], bank: [32, 20]};
+    return {cols, rows, cells, plots, surfaces, shoreColumns, bankStarts, sites, landmarks, fishing};
   }
   function cellsWithMoisture(world,mode){
     const cells=[...world.cells];

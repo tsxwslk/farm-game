@@ -1,5 +1,5 @@
 import {
-  ENTRIES, ITEMS, KILN_COST, RECIPES, RESOURCES, SEEDS_PER_RADISH, STATIONS, TILL_HITS, TOOLS, TRADE, WATER_CAPACITY,
+  ENTRIES, ITEMS, KILN_COST, RECIPES, RESOURCES, SEEDS_PER_RADISH, STATIONS, STATION_ITEMS, TILL_HITS, TOOLS, TRADE, WATER_CAPACITY,
   type EntryId, type Item, type Point, type RecipeId, type Station, type Tool,
 } from './content';
 import type { Plot, Target, World } from './scene';
@@ -7,7 +7,7 @@ import { batchesFor, consume, count, equippedStack, equippedTool, hasRoom, recei
 
 export const DAY = 1080;
 export const START: Point = [11, 6];
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 4;
 export interface Entry {
   lit: boolean;
   deadline: number | null;
@@ -97,6 +97,16 @@ export function formatClock(game: Pick<Game, 'day' | 'minute' | 'review'>) {
   return pad(Math.floor(minute / 60)) + ':' + pad(minute % 60);
 }
 
+export function growthStatus(game: Game, plot: Plot) {
+  const status = window.LiuwanGame.describeGrowth(game, plot);
+  if (plot.watered === null) return status;
+  const minute = Math.ceil(plot.watered + window.LiuwanGame.ripeAfter);
+  if (minute <= game.minute) return status;
+  const day = Math.floor(minute / DAY) + 1;
+  const when = (day === game.day ? '' : '第 ' + day + ' 天 ') + formatClock({ day, minute, review: false });
+  return status + ' · 预计 ' + when + ' 成熟';
+}
+
 export function costs(items: Partial<Record<Item, number>>) {
   return itemCounts(items).map(([item, quantity]) => ITEMS[item] + ' ×' + quantity).join('、');
 }
@@ -110,18 +120,41 @@ export function hasMaterials(game: Game, items: Partial<Record<Item, number>>) {
 }
 
 export function canBuild(game: Game, station: Station) {
-  return !game.stations[station] && (station === 'kiln' ? hasMaterials(game, KILN_COST) : count(game, 'crock') > 0);
+  if (game.stations[station]) return false;
+  if (station === 'jar') return count(game, 'crock') > 0;
+  return !count(game, 'kiln') && !count(game, 'kiln', 'warehouse') && hasMaterials(game, KILN_COST);
 }
 
-export function place(game: Game, station: Station, point: Point, moving: boolean) {
-  if (game.review || (moving && (!game.stations[station] || game.jobs[station])) ||
-    (!moving && !canBuild(game, station))) return null;
-  if (!moving && station === 'kiln') {
+export function place(game: Game, station: Station, point: Point, slot?: number) {
+  if (game.review || game.stations[station]) return null;
+  const item = STATION_ITEMS[station];
+  if (slot !== undefined) {
+    const stack = game.bag[slot];
+    if (stack?.kind !== 'item' || stack.id !== item) return null;
+    consume(game, item, 1, Infinity, slot);
+  } else if (!canBuild(game, station)) return null;
+  else if (station === 'kiln') {
     for (const [item, quantity] of itemCounts(KILN_COST)) consume(game, item, quantity);
-  }
-  if (!moving && station === 'jar') consume(game, 'crock', 1);
+  } else consume(game, item, 1);
   game.stations[station] = point;
-  return record(game, (moving ? '已搬移' : '已摆放') + STATIONS[station] + '。');
+  return record(game, '已摆放' + STATIONS[station] + '。');
+}
+
+export function packStation(game: Game, station: Station) {
+  if (game.review || !game.stations[station]) return { ok: false, message: '这里没有可收起的设施。' };
+  const job = game.jobs[station];
+  if (job) return { ok: false, message: job.ready ? '请先领取成品。' : '加工完成后才能收起。' };
+  const item = STATION_ITEMS[station];
+  if (!hasRoom(game, item)) return { ok: false, message: '背包满了，腾出一格后再收起。' };
+  receive(game, item, 1);
+  delete game.stations[station];
+  return { ok: true, message: record(game, '已收起' + STATIONS[station] + '，可从快捷栏重新摆放。') };
+}
+
+export function catchFish(game: Game) {
+  if (!hasRoom(game, 'crucian')) return '背包满了，鲫鱼游走了。';
+  receive(game, 'crucian', 1, discover(game, 'crucian'));
+  return record(game, '钓到鲫鱼 ×1。可以用盐灶炖汤。');
 }
 
 export function targetKey(target: Target) {
@@ -134,10 +167,9 @@ export function targetAction(game: Game, target: Target): { label: string; tool?
     case 'resource': {
       const rule = RESOURCES[String(target.id)];
       if (game.depleted[String(target.id)]) return { label: '今日已挖完' };
-      const exposedSalt = rule.item === 'rockSalt' && (game.strikes[targetKey(target)] || game.entries.rockSalt);
       return {
         tool: rule.tool,
-        label: rule.tool === 'axe' ? '砍树' : exposedSalt ? '采岩盐' : rule.tool === 'pick' ? '采石' : '挖黏土',
+        label: { stump: '清理树桩', salt: '采岩盐', stone: '采石', clay: '挖黏土', willow: '砍柳树', oak: '砍橡树' }[rule.actor],
         hits: rule.hits,
       };
     }
@@ -150,6 +182,8 @@ export function targetAction(game: Game, target: Target): { label: string; tool?
       return { label: '查看长势' };
     }
     case 'water': return { tool: 'can' as const, label: '取水' };
+    case 'fishing': return { tool: 'rod', label: '抛竿' };
+    case 'ruin': return { label: '查看旧制盐台' };
     case 'chest': return { label: '打开仓库' };
     case 'archive': return { label: '打开田记所' };
     default: return { label: '查看' + STATIONS[target.kind] };
@@ -223,7 +257,7 @@ export function operate(
     plot.planted = plot.watered = null;
     return record(game, '收获樱桃萝卜 ×1。');
   }
-  return window.LiuwanGame.describeGrowth(game, plot);
+  return growthStatus(game, plot);
 }
 
 export function startJob(game: Game, id: RecipeId) {
@@ -275,6 +309,7 @@ export function advance(game: Game, amount: number, onHit: (action: Action) => s
       const clay = game.entries.clay;
       if (clay) clay.lit = true;
     }
+    if (job.recipe === 'fishSoup' && (job.deadlines.crucian ?? 0) > job.at) light(game, 'crucian');
     notes.push(claimJob(game, event.station));
   }
   game.minute = end;

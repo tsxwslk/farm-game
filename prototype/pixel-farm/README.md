@@ -24,7 +24,8 @@ python -m http.server 8766 --bind 127.0.0.1
 - 基础地格 32×32，普通作物种植单元和株行距均为 64 像素，田畦顶面抬高 4 源像素。樱桃萝卜的四个生长阶段和背包图使用 `assets/cherry-radish/`。
 - 全图为 34×20 地格，北侧主田 4×2 种植单元，南侧副田 4×1。地点按钮用于寻路，河岸和山道出口可以到达。
 - 河面沿土水过渡砖接到连续的裸土岸。普通岩石使用 `assets/rock/rock-atlas.png` 前三帧，旧盐坑使用 `rock-ore-salt.png`。
-- 柳湾的默认垂柳素材为 `assets/willow/willow-imported.png`，画布为 96×128，脚点为 `(48, 122)`。人物沿用像素样板，木牌由 Canvas 绘制。
+- 柳湾的默认垂柳素材为 `assets/willow/willow-repaint.png`，画布为 96×128，脚点为 `(48, 122)`。人物沿用像素样板，木牌由 Canvas 绘制。
+- 正式版的林缘橡树使用 `assets/oak/oak-96x128.png`，脚点为 `(48, 122)`。旧制盐台使用 `assets/salt-ruins/salt-ruins-64x64.png`，接地点为 `(32, 58)`。
 - 盐灶使用 `assets/kiln/salt-stove-scene-48x48.png`，接地点为 `(24, 44)`。同目录包含 16×16 背包图标、分层源文件和 Lua 绘制脚本。
 - 田记所旧址使用 `assets/house/house-cottage-128x104.png`，脚点为 `(64, 96)`，投影根据房屋轮廓生成。
 - 院内和恢复后的腌菜缸使用 `assets/jar/jar-crock-48x48.png`，脚点为 `(24, 44)`，投影根据缸身轮廓生成。

@@ -1,0 +1,56 @@
+{
+  "size": [
+    64,
+    64
+  ],
+  "anchor": [
+    32,
+    58
+  ],
+  "view": "固定俯视微倾，左上受光",
+  "source": "salt-ruins.lua（Aseprite 索引色，16 色）",
+  "palette": {
+    "line": "#322D27",
+    "dark": "#4A443C",
+    "face2": "#575046",
+    "mid": "#6E675C",
+    "light": "#8A8272",
+    "hi": "#A79C86",
+    "i_line": "#262520",
+    "i_dark": "#3C3B35",
+    "i_mid": "#55544D",
+    "i_hi": "#8B8981",
+    "salt": "#DCD6C8",
+    "salt_hi": "#F5F2E9",
+    "w_line": "#291E15",
+    "w_dark": "#3A2A1C",
+    "w_mid": "#6A5236",
+    "w_hi": "#826644"
+  },
+  "bbox": [
+    2,
+    34,
+    58,
+    58
+  ],
+  "footprint_tiles": 1.78,
+  "contact_run_px": 15,
+  "components": 1,
+  "mirror_diff_px": 296,
+  "area_px": {
+    "stone": 953,
+    "iron": 134,
+    "salt": 7,
+    "wood": 150,
+    "total": 1244
+  },
+  "aseprite": {
+    "magic_ok": true,
+    "frames": 1,
+    "size": [
+      64,
+      64
+    ],
+    "color_depth": 8
+  }
+}

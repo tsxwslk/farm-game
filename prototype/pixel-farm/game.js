@@ -216,7 +216,8 @@
     return null;
   }
 
-  const api = {DAY, SAVE_KEY, ITEMS, ENTRIES, RECIPES, CROP_STAGES, newGame, count, cropStage, describeGrowth, advance, nextDay, interact, passable, routeTo};
+  const api = {DAY, SAVE_KEY, ITEMS, ENTRIES, RECIPES, CROP_STAGES, ripeAfter: CROP_STAGES.at(-1).from,
+    newGame, count, cropStage, describeGrowth, advance, nextDay, interact, passable, routeTo};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.LiuwanGame = api;
 })(typeof window !== 'undefined' ? window : globalThis);

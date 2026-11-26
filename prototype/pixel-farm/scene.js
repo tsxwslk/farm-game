@@ -45,10 +45,18 @@ window.startLiuwanScene = function ({layout, jobMeter, assetUrl = file => file, 
     seedBox: {...D.crate, contact: 28},
     kiln: {file: 'assets/kiln/salt-stove-scene-48x48.png', anchor: [24, 44], contact: 25},
     jar: {...D.jar, contact: 16},
-    willow: {file: 'assets/willow/willow-imported.png', anchor: [48, 122], contact: 13},
+    willow: {file: 'assets/willow/willow-repaint.png', anchor: [48, 122], contact: 13},
     salt: {file: 'assets/rock/rock-ore-salt.png', anchor: [24, 44], contact: 28},
     stone: {file: 'assets/rock/rock-atlas.png', anchor: [24, 44], frameSize: 48, frames: 3, contact: 26},
   };
+  if (layout) {
+    sprites.oak = {file: 'assets/oak/oak-96x128.png', anchor: [48, 122], contact: 13};
+    sprites.ruin = {file: 'assets/salt-ruins/salt-ruins-64x64.png', anchor: [32, 58], contact: 30};
+    const stump = 'assets/stump/stump-48x48.png';
+    if (assetUrl(stump)) {
+      sprites.stump = {file: stump, anchor: [24, 44], contact: 24};
+    }
+  }
   const bedColors = {
     dry: '#754a24',
     wet: '#503322',
@@ -78,9 +86,9 @@ window.startLiuwanScene = function ({layout, jobMeter, assetUrl = file => file, 
     at('jar', 19.9, 16.5, {forgotten: true}),
   ];
   const fixedActors = layout ? [
-    ...demoActors.filter(actor => actor.kind === 'cottage' ||
-      (actor.kind === 'willow' && actor.x >= 23 * TILE)),
+    demoActors[0],
     at('crate', chestTile[0] + .5, chestTile[1] + .4),
+    at('ruin', layout.saltRuin[0] + .5, layout.saltRuin[1] + .6),
     ...Object.entries(layout.resources).map(([id, resource]) =>
       at(resource.actor, resource.tile[0] + .5, resource.tile[1] + .62, {id, resource})),
   ] : demoActors;
@@ -132,7 +140,12 @@ window.startLiuwanScene = function ({layout, jobMeter, assetUrl = file => file, 
       scene.fillStyle = color;
       scene.fillRect(left, top, width, height);
     };
-    if (kind === 'mark') {
+    if (kind === 'stump') {
+      rect('#513c2b', -15, -4, 30, 4);
+      rect('#765238', -10, -12, 20, 10);
+      rect('#b88f61', -9, -14, 18, 6);
+      rect('#8f6947', -5, -12, 11, 2);
+    } else if (kind === 'mark') {
       const label = game.submitted ? actor.text : actor.hint;
       const width = label.length * 10 + 8;
       rect('#654d36', -2, -22, 4, 22);
@@ -155,7 +168,7 @@ window.startLiuwanScene = function ({layout, jobMeter, assetUrl = file => file, 
     }
     const width = sprites[kind]?.contact;
     if (!width) return;
-    if (kind === 'willow') {
+    if (isTree(kind)) {
       scene.fillStyle = '#3043322b';
       scene.fillRect(x - 9, y - 2, 27, 4);
       scene.fillRect(x - 4, y + 2, 27, 3);
@@ -196,6 +209,49 @@ window.startLiuwanScene = function ({layout, jobMeter, assetUrl = file => file, 
       }
     }
     scene.globalAlpha = 1;
+  }
+
+  const daylight = [
+    [0, 123, 157, 173, .19],
+    [180, 180, 194, 173, .02],
+    [480, 245, 219, 169, .025],
+    [720, 233, 155, 95, .20],
+    [900, 50, 66, 122, .27],
+    [1080, 37, 49, 100, .34],
+  ];
+
+  function drawDaylight(minute) {
+    const index = daylight.findIndex(frame => frame[0] >= minute);
+    const start = daylight[Math.max(0, index - 1)];
+    const end = daylight[index];
+    const progress = start === end ? 0 : (minute - start[0]) / (end[0] - start[0]);
+    const [, r, g, b, alpha] = start.map((value, i) => value + (end[i] - value) * progress);
+    scene.fillStyle = `rgba(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)}, ${alpha})`;
+    scene.fillRect(view.x, view.y, view.width, view.height);
+  }
+
+  function drawFishing(person, motion, phase) {
+    const [x, y] = world.fishing.water.map(tile => tile * TILE + TILE / 2);
+    const ripple = reducedMotion.matches ? 6 : 5 + phase % 12 / 2;
+    scene.strokeStyle = '#d0ede0';
+    scene.beginPath();
+    scene.ellipse(x, y, ripple, 2, 0, 0, Math.PI * 2);
+    scene.stroke();
+    if (!motion.fishing) return;
+    const rod = [person.x + 13, person.y - 27];
+    scene.strokeStyle = '#745438';
+    scene.beginPath();
+    scene.moveTo(person.x + 5, person.y - 14);
+    scene.lineTo(...rod);
+    scene.stroke();
+    scene.strokeStyle = '#ddd9bd';
+    scene.beginPath();
+    scene.moveTo(...rod);
+    scene.lineTo(x, y);
+    scene.stroke();
+    scene.fillStyle = motion.fishing.biting ? '#f7cf60' : '#cc7659';
+    const size = motion.fishing.biting ? 7 : 4;
+    scene.fillRect(x - 2, y - size, 4, size);
   }
 
   function drawFigure(actor, image, x, y, motion) {
@@ -263,6 +319,27 @@ window.startLiuwanScene = function ({layout, jobMeter, assetUrl = file => file, 
     scene.fillRect(x - 27, top + 14, Math.round(54 * elapsed / duration), 3);
   }
 
+  function drawPackingRing(actor, progress) {
+    const x = actor.x;
+    const y = Math.max(view.y + 15, actor.y - sprites[actor.kind].anchor[1] - 5);
+    const radius = 9;
+    const start = -Math.PI / 2;
+    scene.beginPath();
+    scene.arc(x, y, radius + 4, 0, 2 * Math.PI);
+    scene.fillStyle = '#302d23ef';
+    scene.fill();
+    scene.beginPath();
+    scene.arc(x, y, radius, 0, 2 * Math.PI);
+    scene.lineWidth = 3;
+    scene.strokeStyle = '#837152';
+    scene.stroke();
+    scene.beginPath();
+    scene.arc(x, y, radius, start, start + 2 * Math.PI * progress);
+    scene.strokeStyle = '#ffe5a6';
+    scene.stroke();
+    scene.lineWidth = 1;
+  }
+
   function drawScene(game, position, hovered, placement, motion, phase, hitFrame) {
     drawBeds(game);
     scene.drawImage(groundLayer.canvas, view.x, view.y, view.width, view.height, view.x, view.y, view.width, view.height);
@@ -300,7 +377,7 @@ window.startLiuwanScene = function ({layout, jobMeter, assetUrl = file => file, 
         drawCrop(actor.plot, actor.stage);
         continue;
       }
-      const kind = actor.kind === 'salt' && layout && !game.strikes[actor.id] && !game.entries.rockSalt ? 'stone' : actor.kind;
+      const kind = actor.kind;
       const sprite = sprites[kind];
       if (!sprite) {
         pixelProp(actor, game);
@@ -333,6 +410,11 @@ window.startLiuwanScene = function ({layout, jobMeter, assetUrl = file => file, 
     }
     if (layout && motion?.hit && !reducedMotion.matches) {
       drawWorkImpact(motion.hit, hitFrame);
+    }
+    if (layout) {
+      const dayMinute = Math.min(G.DAY, Math.max(0, game.minute - (game.day - 1) * G.DAY));
+      drawDaylight(Math.floor(dayMinute));
+      drawFishing(person, motion, phase);
     }
     for (const actor of visible) {
       const job = game.jobs[actor.kind];
@@ -376,14 +458,20 @@ window.startLiuwanScene = function ({layout, jobMeter, assetUrl = file => file, 
       scene.drawImage(images[ghost.kind], ghost.x - anchor[0], ghost.y - anchor[1]);
       scene.globalAlpha = 1;
     }
+    if (layout && motion.packing) {
+      const actor = visible.find(candidate => candidate.kind === motion.packing.kind);
+      if (actor) drawPackingRing(actor, motion.packing.progress);
+    }
   }
 
   function draw(game, position, hovered, placement, motion) {
     const width = stage.clientWidth, height = stage.clientHeight;
     if (width < 1 || height < 1) return;
+    const referenceWidth = layout ? 34 * TILE : W;
+    const referenceHeight = layout ? 20 * TILE : H;
     const scale = zoom.overview
       ? Math.min(width / W, height / H)
-      : Math.max(width / W, height / H) * zoom.scales[zoom.level];
+      : Math.max(width / referenceWidth, height / referenceHeight) * zoom.scales[zoom.level];
     const pixelsWide = zoom.overview ? Math.ceil(width / scale) : Math.max(1, Math.floor(width / scale));
     const pixelsHigh = zoom.overview ? Math.ceil(height / scale) : Math.max(1, Math.floor(height / scale));
     view.width = Math.min(W, pixelsWide);
@@ -398,7 +486,8 @@ window.startLiuwanScene = function ({layout, jobMeter, assetUrl = file => file, 
     const swingFrame = layout && game.action ? Math.floor((game.action.at - game.minute) * 22) : 0;
     const signature = JSON.stringify([position, hovered?.kind, hovered?.id, game.stations, placement, game.submitted,
       layout ? [game.strikes, game.depleted, Boolean(game.entries.rockSalt), game.action?.key, swingFrame,
-        phase, reducedMotion.matches, motion.facing, motion.hit, hitFrame] : game.minute >= game.mineReady,
+        phase, game.day, Math.floor(game.minute), reducedMotion.matches, motion.facing, motion.hit, hitFrame,
+        motion.fishing, motion.packing] : game.minute >= game.mineReady,
       game.plots.map(plot => G.cropStage(game, plot)), Object.entries(game.jobs).map(([station, job]) =>
         [station, Math.ceil(job.at - game.minute), job.ready, layout ? Math.floor((game.minute - job.started) * 12) : null])]);
     if (signature === previousFrame && viewport === previousView) return;
@@ -433,13 +522,15 @@ window.startLiuwanScene = function ({layout, jobMeter, assetUrl = file => file, 
     return {kind: 'water', id: 'river-' + y, label: '河流', points};
   }) : [];
   const river = {kind: 'water', id: 'river', label: '河流', points: waterRows.flatMap(target => target.points)};
+  const fishing = {kind: 'fishing', label: '回水湾', tile: world.fishing.water, points: [world.fishing.bank]};
   const targets = layout ? [
     archive, ...stations,
     {kind: 'chest', actor: 'crate', label: '仓库', tile: chestTile, points: adjacent(chestTile)},
-    river,
+    {kind: 'ruin', actor: 'ruin', label: '旧制盐台', tile: layout.saltRuin, points: adjacent(layout.saltRuin)},
+    river, fishing,
     ...Object.entries(layout.resources).map(([id, resource]) => ({
       kind: 'resource', id, actor: resource.actor, tile: resource.tile,
-      label: resource.actor === 'clay' ? '黏土' : resource.actor === 'willow' ? '柳树' : '岩石',
+      label: {clay: '黏土', willow: '柳树', oak: '橡树', stump: '树桩', salt: '白纹岩石'}[resource.actor] ?? '岩石',
       points: resource.actor === 'clay' ? [resource.tile] : adjacent(resource.tile),
     })),
     ...plots,
@@ -466,6 +557,10 @@ window.startLiuwanScene = function ({layout, jobMeter, assetUrl = file => file, 
 
   function adjacent([x, y]) {
     return [[x, y + 1], [x - 1, y], [x + 1, y], [x, y - 1]];
+  }
+
+  function isTree(kind) {
+    return kind === 'willow' || kind === 'oak';
   }
 
   function obstacles(stations, game) {
@@ -514,12 +609,16 @@ window.startLiuwanScene = function ({layout, jobMeter, assetUrl = file => file, 
   function pick(x, y, tool) {
     if (layout) {
       const col = Math.floor(x / TILE), row = Math.floor(y / TILE);
+      if (tool === 'rod' && [world.fishing.water, world.fishing.bank].some(([px, py]) => px === col && py === row)) return fishing;
       const facility = targets.find(target => target.kind !== 'resource' &&
-        target.tile?.[0] === col && target.tile[1] === row);
+        target.kind !== 'fishing' && target.tile?.[0] === col && target.tile[1] === row);
       if (facility) return facility;
       const water = waterRows[row];
       if (water && (col >= world.shoreColumns[row] ||
         (tool === 'can' && water.points.some(([bank]) => bank === col)))) return water;
+      const tree = actors.find(actor => actor.resource && isTree(actor.kind) &&
+        actor.resource.tile[0] === col && actor.resource.tile[1] === row);
+      if (tree) return targets.find(target => target.kind === 'resource' && target.id === tree.id);
     }
     for (const target of targets) {
       if (!target.actor) continue;
@@ -536,7 +635,7 @@ window.startLiuwanScene = function ({layout, jobMeter, assetUrl = file => file, 
       if (sprite) {
         const rock = actor.kind === 'salt' || actor.kind === 'stone';
         const inset = rock ? 7 : actor.kind === 'jar' ? 9 : actor.kind === 'kiln' ? 8 : 4;
-        const topInset = rock ? 23 : actor.kind === 'willow' ? 45 : actor.kind === 'kiln' ? 14 : 6;
+        const topInset = rock ? 23 : isTree(actor.kind) ? 45 : actor.kind === 'kiln' ? 14 : 6;
         const left = actor.x - sprite.anchor[0] + inset;
         const top = actor.y - sprite.anchor[1] + topInset;
         if (x >= left && x < left + (sprite.frameSize ?? image.width) - inset * 2 && y >= top && y <= actor.y) return target;

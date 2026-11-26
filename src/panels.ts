@@ -98,7 +98,7 @@ export function inventoryPanel(game: Game, showWarehouse: boolean, source: SlotA
     details.append(element('span', describeSlot(game, item) + ' · 点目标格移动'));
     if (source.storage === 'bag') {
       const actions = element('div', undefined, 'sheet-actions');
-      actions.append(button('选用', () => equip(source.index), false, true));
+      actions.append(button(item.id === 'kiln' || item.id === 'crock' ? '选用摆放' : '选用', () => equip(source.index), false, true));
       if (item.id === 'radish') {
         actions.append(button('留种 ×' + SEEDS_PER_RADISH, () => update(saveSeed(game, source.index))));
       }
@@ -111,14 +111,15 @@ export function inventoryPanel(game: Game, showWarehouse: boolean, source: SlotA
   const crafting = element('ul', undefined, 'sheet-list');
   crafting.append(
     listRow('盐灶 · ' + costs(KILN_COST),
-      button(game.stations.kiln ? '已建造' : '选址', () => placement('kiln'), !canBuild(game, 'kiln'))),
+      button(game.stations.kiln ? '已摆放' : count(game, 'kiln') || count(game, 'kiln', 'warehouse') ? '已收起' : '选址',
+        () => placement('kiln'), !canBuild(game, 'kiln'))),
     listRow('腌菜缸 · 在盐灶烧制', button(game.stations.jar ? '已摆放' : '摆放', () => placement('jar'), !canBuild(game, 'jar'))),
   );
   return [grids, details, element('h3', '制作与摆放', 'section-title'), crafting];
 }
 
 export function stationPanel(game: Game, station: Station, update: (message: string) => void,
-  move: () => void) {
+  pack: () => void) {
   const list = element('ul', undefined, 'sheet-list');
   const job = game.jobs[station];
   if (job) {
@@ -139,13 +140,13 @@ export function stationPanel(game: Game, station: Station, update: (message: str
   }
   for (const id of Object.keys(RECIPES) as RecipeId[]) {
     const recipe = RECIPES[id];
-    if (recipe.station !== station) continue;
+    if (recipe.station !== station || (id === 'fishSoup' && !game.entries.crucian)) continue;
     list.append(listRow(recipe.label + ' · ' + costs(recipe.inputs),
       button('开工', () => update(startJob(game, id)), !hasMaterials(game, recipe.inputs), true)));
   }
   const actions = element('div', undefined, 'sheet-actions');
-  actions.append(button('搬移' + STATIONS[station], move));
-  return [list, element('p', '在空闲时可调整摆放位置。', 'sheet-note'), actions];
+  actions.append(button('收起' + STATIONS[station], pack));
+  return [list, element('p', '可长按空闲设施收进背包。', 'sheet-note'), actions];
 }
 
 export class TradingBook {
@@ -329,7 +330,8 @@ export function mapPanel(world: World, game: Game) {
     map.append(pin);
   }
   marker('田记所', 6, 5, '所');
-  marker('柳湾河', 30, 10, '河');
+  for (const { label, tile, mark } of world.landmarks) marker(label, ...tile, mark);
+  marker('回水湾钓点', ...world.fishing.water, '钓');
   if (game.entries.rockSalt) marker('岩盐发现处', ...RESOURCES['buried-salt'].tile, '盐');
   for (const [station, position] of Object.entries(game.stations) as [Station, [number, number]][]) {
     marker(STATIONS[station], ...position, station === 'kiln' ? '灶' : '缸');

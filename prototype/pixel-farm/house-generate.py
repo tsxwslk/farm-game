@@ -454,7 +454,7 @@ def field(name):
         canvas.alpha_composite(s, (int(cx * gt * sc - ax * sc), int(gy * gt * sc - ay * sc)))
 
     place('assets/house/house-cottage-128x104.png', 3.5, 5.1, 64, BASE)
-    place('assets/willow/willow-imported.png', 9.4, 5.6, 48, 122)
+    place('assets/willow/willow-repaint.png', 9.4, 5.6, 48, 122)
     place('assets/rock/rock-plain-0.png', 1.1, 5.5, 24, 44)
     place('assets/crate/crate-harvest-48x48.png', 6.6, 5.0, 24, 44)
     canvas.save(PREVIEWS / f'{name}-field-2x.png', optimize=True)

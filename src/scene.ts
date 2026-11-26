@@ -12,10 +12,12 @@ export interface World {
   rows: number;
   cells: string[];
   plots: { id: number; x: number; y: number }[];
+  landmarks: { id: string; label: string; tile: Point; mark: string }[];
+  fishing: { water: Point; bank: Point };
 }
 
 export interface Target {
-  kind: 'plot' | 'resource' | 'water' | 'chest' | 'archive' | Station;
+  kind: 'plot' | 'resource' | 'water' | 'chest' | 'archive' | 'ruin' | 'fishing' | Station;
   id?: string | number;
   label?: string;
   tile?: Point;
@@ -24,7 +26,7 @@ export interface Target {
 
 export interface Placement {
   kind: Station;
-  moving: boolean;
+  slot?: number;
   tile: Point | null;
   allowed: boolean;
 }
@@ -34,6 +36,8 @@ export interface Motion {
   facing: Point;
   progress: { done: number; total: number } | null;
   hit: { tool: 'hoe' | 'pick' | 'axe' | 'can'; point: Point; minute: number } | null;
+  fishing: { biting: boolean } | null;
+  packing: { kind: Station; progress: number } | null;
 }
 
 export interface Scene {
@@ -57,11 +61,12 @@ declare global {
       DAY: number;
       cropStage(game: Game, plot: Plot): CropStage;
       describeGrowth(game: Game, plot: Plot): string;
+      ripeAfter: number;
       passable(world: World, blocked: Set<number>, x: number, y: number): boolean;
       routeTo(world: World, blocked: Set<number>, from: Point, destinations: Point[]): Point[] | null;
     };
     startLiuwanScene(options: {
-      layout: { resources: object };
+      layout: { resources: object; saltRuin: Point };
       jobMeter: (job: import('./game').Job, minute: number) => { remaining: number; elapsed: number; duration: number };
       assetUrl: (file: string) => string;
       createControls: (scene: Scene) => void;

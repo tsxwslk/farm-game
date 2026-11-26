@@ -1,25 +1,28 @@
 import { assetUrl } from './assets';
-import { BAG_SLOTS, HOTBAR_COLUMNS, ITEMS, RECIPES, STATIONS, TOOLS, type EntryId, type Point, type Station } from './content';
+import { BAG_SLOTS, HOTBAR_COLUMNS, ITEMS, RECIPES, STATIONS, STATION_ITEMS, TOOLS, type EntryId, type Point, type Station } from './content';
 import {
-  advance, canBuild, formatClock, jobMeter, newGame, nextDay, operate, place,
+  advance, canBuild, catchFish, formatClock, growthStatus, jobMeter, newGame, nextDay, operate, packStation, place,
   renewResources, targetAction, targetKey, targetProgress,
   type Game,
 } from './game';
 import { createHotbar } from './hotbar';
-import { equipSlot, equippedTool, moveStack, type SlotAddress } from './inventory';
+import { equipSlot, equippedStack, equippedTool, moveStack, type SlotAddress } from './inventory';
 import { TradingBook, element, inventoryPanel, ledgerPanel, mapPanel, node, stationPanel } from './panels';
 import { createSaveControls } from './save-controls';
 import type { Motion, Placement, Scene, Target } from './scene';
 
 const TILE = 32;
 const WALK_SPEED = 6;
+const PACK_HOLD_MS = 550;
 const MOVES: Record<string, Point> = { w: [0, -1], a: [-1, 0], s: [0, 1], d: [1, 0] };
 type Panel = 'bag' | 'warehouse' | 'ledger' | 'map' | 'saves' | 'archive' | Station;
 
 export async function createControls(scene: Scene) {
   const { world, canvas, view, zoom, targets, blocked, draw, pick, setStations, canPlace } = scene;
   const river = targets.find(target => target.kind === 'water');
-  const { passable, routeTo, describeGrowth } = window.LiuwanGame;
+  const fishingSpot = targets.find(target => target.kind === 'fishing');
+  const { passable, routeTo } = window.LiuwanGame;
+  const coarsePointer = matchMedia('(pointer: coarse)');
   const sheet = node<HTMLDialogElement>('game-sheet');
   const review = node<HTMLDialogElement>('game-review');
   const body = node('sheet-body');
@@ -40,6 +43,9 @@ export async function createControls(scene: Scene) {
   let hovered: Target | null = null;
   let placement: Placement | null = null;
   let hit: Motion['hit'] = null;
+  let fishing: { bite: number; until: number } | null = null;
+  let hold: { kind: Station; pointerId: number; x: number; y: number; started: number; timer: number } | null = null;
+  let packedByHold = false;
   let panel: Panel | null = null;
   let selectedStack: SlotAddress | null = null;
   let selectedEntry: EntryId = 'radish';
@@ -82,10 +88,12 @@ export async function createControls(scene: Scene) {
   }
 
   function stopMovement() {
+    cancelHold();
     keys.clear();
     route = [];
     step = null;
     pendingTarget = null;
+    fishing = null;
   }
 
   function isNear(target: Target) {
@@ -93,6 +101,7 @@ export async function createControls(scene: Scene) {
   }
 
   function activeTarget() {
+    if (fishing && fishingSpot) return fishingSpot;
     if (selected && isNear(selected)) return selected;
     if (hovered && isNear(hovered)) return hovered;
 
@@ -113,11 +122,37 @@ export async function createControls(scene: Scene) {
   function gameAction() {
     if (game.review || saves.busy || sheet.open) return;
     if (placement) {
+      if (placement.slot !== undefined) selectSlot(null);
       placement = null;
       report('已取消摆放。');
       return;
     }
     interact(activeTarget());
+  }
+
+  function useFishing() {
+    if (equippedTool(game) !== 'rod') return report('先在快捷栏选中钓竿。');
+    if (fishing) {
+      if (game.minute < fishing.bite) {
+        fishing = null;
+        report('收起了钓线。');
+      } else if (game.minute < fishing.until) {
+        fishing = null;
+        report(catchFish(game));
+        void saves.save();
+      } else {
+        fishing = null;
+        report('鲫鱼脱钩了，可以重新抛竿。');
+      }
+      return;
+    }
+    if (game.day * window.LiuwanGame.DAY - game.minute < 9) return report('快到午夜了，明天再来抛竿。');
+    stopMovement();
+    game.action = null;
+    facing = [1, 0];
+    const bite = game.minute + 4 + Math.floor(game.minute) % 3;
+    fishing = { bite, until: bite + 2.5 };
+    report('等浮标有动静，再按 F 或点浮标收线。');
   }
 
   function impactPoint(target: Target): Point {
@@ -127,7 +162,7 @@ export async function createControls(scene: Scene) {
     }
     if (target.kind === 'water') {
       const [x, y] = game.position;
-      const water = [[x + 1, y], [x, y + 1], [x, y - 1]]
+      const water = [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]]
         .find(([col, row]) => world.cells[row * world.cols + col] === 'water');
       if (water) return [(water[0] + .5) * TILE, (water[1] + .5) * TILE];
     }
@@ -141,6 +176,10 @@ export async function createControls(scene: Scene) {
       return;
     }
     if (!isNear(target) || game.action?.key === targetKey(target)) return;
+    if (target.kind === 'fishing') {
+      useFishing();
+      return;
+    }
     stopMovement();
     game.action = null;
     selected = target;
@@ -154,11 +193,19 @@ export async function createControls(scene: Scene) {
       openPanel(target.kind);
       return;
     }
+    if (target.kind === 'ruin') {
+      report('旧制盐台旁留着一句话：「敲下灰白纹的石头，入灶煮成粗盐。」白纹岩石就在东边。');
+      return;
+    }
+    const firstWater = target.kind === 'plot' && game.plots.every(plot => plot.watered === null) &&
+      !game.entries.radish && !game.entries.rockSalt;
     const result = operate(game, target, clearPlot);
     if (equippedTool(game) === 'can' && (result === '浇过水了。' || result === '水壶已装满。')) {
       hit = { tool: 'can', point: impactPoint(target), minute: game.minute };
     }
-    report(result);
+    report(firstWater && result === '浇过水了。'
+      ? '萝卜开始生长。田记所东边的小径通往北侧林缘，旧制盐台就在林缘东头。'
+      : result);
     void saves.save();
   }
 
@@ -186,6 +233,10 @@ export async function createControls(scene: Scene) {
         else renderPanel();
         report(notes.at(-1)!, sheetMessage);
       } else report(notes.at(-1)!);
+    }
+    if (fishing && game.minute >= fishing.until) {
+      fishing = null;
+      report('鲫鱼脱钩了，可以重新抛竿。');
     }
     if (!game.review && (notes.length || landed)) void saves.save();
     if (game.review && savedReviewDay !== game.day) {
@@ -218,6 +269,7 @@ export async function createControls(scene: Scene) {
     }
     keys.clear();
     game.action = null;
+    fishing = null;
     const from = step?.to ?? game.position;
     let found = routeTo(world, blocked, from, destinations);
     if (!found && target?.kind === 'water' && river) {
@@ -242,6 +294,7 @@ export async function createControls(scene: Scene) {
         return;
       }
       game.action = null;
+      fishing = null;
       facing = [next[0] - game.position[0], next[1] - game.position[1]];
       step = { to: next, progress: 0 };
     }
@@ -275,8 +328,10 @@ export async function createControls(scene: Scene) {
     const name = action?.label === '播种' ? ITEMS.seeds + ' · ' : action?.tool ? TOOLS[action.tool].name + ' · ' : '';
     const suffix = (progress ? ' ' + progress.done + '/' + progress.total : '') +
       (target && isNear(target) ? ' · 点击 / F' : '');
-    const growth = target?.kind === 'plot' && action?.label === '查看长势' ? describeGrowth(game, game.plots[Number(target.id)]) : '';
-    showText(node('target-hint'), placement ? '点击空地确认，Esc 取消' : growth || (action ? name + action.label + suffix : ''));
+    const growth = target?.kind === 'plot' && action?.label === '查看长势' ? growthStatus(game, game.plots[Number(target.id)]) : '';
+    const fishingHint = fishing ? (game.minute >= fishing.bite ? '咬钩了！按 F 或点浮标收线' : '等候咬钩 · F 收竿') : '';
+    const placementHint = coarsePointer.matches ? '点空地预览，再点一次摆放' : '点击空地确认，Esc 取消';
+    showText(node('target-hint'), placement ? placementHint : fishingHint || growth || (action ? name + action.label + suffix : ''));
     if (!message.hidden && now > messageExpires) message.hidden = true;
     renderHotbar(game);
     showButton(actionButton, placement ? '取消' : '操作', placement ? 'Esc' : 'F');
@@ -329,6 +384,8 @@ export async function createControls(scene: Scene) {
     const target = activeTarget() ?? hovered ?? selected;
     draw(game, position, target, placement, {
       step: step?.progress ?? null, facing, progress: target ? targetProgress(game, target) : null, hit,
+      fishing: fishing && { biting: game.minute >= fishing.bite },
+      packing: hold && { kind: hold.kind, progress: Math.min(1, Math.max(0, (now - hold.started) / PACK_HOLD_MS)) },
     });
     updateJobPanel();
     updateHud(now);
@@ -345,6 +402,8 @@ export async function createControls(scene: Scene) {
       closePanel();
       return;
     }
+    if (placement?.slot !== undefined) selectSlot(null);
+    placement = null;
     stopMovement();
     panel = name;
     selectedStack = null;
@@ -392,7 +451,7 @@ export async function createControls(scene: Scene) {
       void saves.render();
     } else {
       const station = panel;
-      body.replaceChildren(...stationPanel(game, station, update, () => beginPlacement(station, true)));
+      body.replaceChildren(...stationPanel(game, station, update, () => storeFacility(station)));
     }
     tickPanel();
     updateJobPanel();
@@ -425,12 +484,29 @@ export async function createControls(scene: Scene) {
     void saves.save();
   }
 
-  function beginPlacement(kind: Station, moving = false) {
-    if (moving ? !game.stations[kind] || game.jobs[kind] : !canBuild(game, kind)) return;
-    placement = { kind, moving, tile: null, allowed: false };
+  function storeFacility(kind: Station) {
+    if (saves.busy) return;
+    const result = packStation(game, kind);
+    if (!result.ok) {
+      report(result.message, sheet.open ? sheetMessage : message);
+      return;
+    }
+    stopMovement();
+    selected = hovered = null;
+    setStations(game);
+    closePanel();
+    canvas.focus({ preventScroll: true });
+    report(result.message);
+    void saves.save();
+  }
+
+  function beginPlacement(kind: Station, slot?: number) {
+    if (game.stations[kind] || (slot === undefined && !canBuild(game, kind))) return;
+    stopMovement();
+    placement = { kind, slot, tile: null, allowed: false };
     selected = hovered = null;
     closePanel();
-    report('选择一格空地' + (moving ? '搬移' : '摆放') + STATIONS[kind] + '。');
+    report('选择一格空地摆放' + STATIONS[kind] + '。');
   }
 
   function canSwitchSlots() {
@@ -438,10 +514,18 @@ export async function createControls(scene: Scene) {
   }
 
   function selectSlot(index: number | null, row?: number) {
-    if (!equipSlot(game, index, row)) return;
-    pendingTarget = null;
-    renderHotbar(game);
-    void saves.save();
+    placement = null;
+    if (equipSlot(game, index, row)) {
+      fishing = null;
+      pendingTarget = null;
+      renderHotbar(game);
+      void saves.save();
+    }
+    const stack = equippedStack(game);
+    const kind = (Object.keys(STATION_ITEMS) as Station[]).find(station => STATION_ITEMS[station] === stack?.id);
+    if (!kind || game.equippedSlot === null) return;
+    if (game.stations[kind]) report('场上已有' + STATIONS[kind] + '。');
+    else beginPlacement(kind, game.equippedSlot);
   }
 
   function cycleRow() {
@@ -472,9 +556,43 @@ export async function createControls(scene: Scene) {
     return [Math.floor(x / TILE), Math.floor(y / TILE)];
   }
 
+  function cancelHold() {
+    if (hold) window.clearTimeout(hold.timer);
+    hold = null;
+  }
+
+  canvas.addEventListener('pointerdown', event => {
+    if (!event.isPrimary || event.button !== 0) return;
+    cancelHold();
+    packedByHold = false;
+    if (placement || panel || game.review || saves.busy) return;
+    const point = worldPoint(event);
+    const target = point && pick(...point, equippedTool(game));
+    if (!target || (target.kind !== 'kiln' && target.kind !== 'jar') || !isNear(target)) return;
+    const kind = target.kind;
+    const started = performance.now();
+    const timer = window.setTimeout(() => {
+      hold = null;
+      if (placement || panel || game.review || !isNear(target)) return;
+      packedByHold = true;
+      storeFacility(kind);
+    }, PACK_HOLD_MS);
+    hold = { kind, pointerId: event.pointerId, x: event.clientX, y: event.clientY, started, timer };
+  });
+  for (const name of ['pointerup', 'pointercancel', 'pointerleave', 'lostpointercapture'] as const) {
+    canvas.addEventListener(name, event => {
+      if (hold?.pointerId === event.pointerId) cancelHold();
+    });
+  }
+  canvas.addEventListener('contextmenu', event => {
+    if (hold || packedByHold) event.preventDefault();
+  });
+
   canvas.addEventListener('pointermove', event => {
+    if (hold?.pointerId === event.pointerId && Math.hypot(event.clientX - hold.x, event.clientY - hold.y) > 8) cancelHold();
     const point = worldPoint(event);
     if (placement) {
+      if (event.pointerType === 'touch') return;
       const tile = point && tileAt(point);
       if (tile?.join() === placement.tile?.join()) return;
       placement.tile = tile;
@@ -483,16 +601,25 @@ export async function createControls(scene: Scene) {
   });
   canvas.addEventListener('pointerleave', () => { hovered = null; });
   canvas.addEventListener('click', event => {
+    if (packedByHold) {
+      packedByHold = false;
+      return;
+    }
     if (saves.busy || game.review || panel) return;
     const point = worldPoint(event);
     if (!point) return;
     const tile = tileAt(point);
     if (placement) {
+      if (!placement.tile || tile[0] !== placement.tile[0] || tile[1] !== placement.tile[1]) {
+        placement.tile = tile;
+        placement.allowed = canPlace(game, placement.kind, tile);
+        if (coarsePointer.matches) return;
+      }
       if (!canPlace(game, placement.kind, tile)) {
         report('此处不可摆放。请选可到达的空地。');
         return;
       }
-      const result = place(game, placement.kind, tile, placement.moving);
+      const result = place(game, placement.kind, tile, placement.slot);
       if (!result) return;
       setStations(game);
       placement = null;
@@ -512,26 +639,38 @@ export async function createControls(scene: Scene) {
   }
   let scroll = 0;
   let lastScroll = -Infinity;
-  let lastWheelStep = -Infinity;
+  let lastZoomStep = -Infinity;
+  let slotDirection = 0;
   let zoomGesture = false;
   function handleWheel(event: WheelEvent) {
     if (event.ctrlKey) return;
     event.preventDefault();
     const zooming = event.shiftKey || Boolean(placement);
     if (!zooming && !canSwitchSlots()) return;
+    const delta = (event.deltaY || event.deltaX) * (event.deltaMode === 1 ? 40 : event.deltaMode === 2 ? 100 : 1);
+    if (!delta) return;
     const now = performance.now();
-    if (now - lastScroll > 160 || zooming !== zoomGesture) scroll = 0;
+    if (now - lastScroll > 160 || zooming !== zoomGesture) {
+      scroll = 0;
+      slotDirection = 0;
+    }
     zoomGesture = zooming;
     lastScroll = now;
-    const delta = (event.deltaY || event.deltaX) * (event.deltaMode === 1 ? 40 : event.deltaMode === 2 ? 100 : 1);
-    if (scroll && Math.sign(scroll) !== Math.sign(delta)) scroll = 0;
+    const direction = Math.sign(delta);
+    if (Math.sign(scroll) !== direction) scroll = 0;
+    // Ignore the rest of a same-direction burst after selecting a slot.
+    if (!zooming && direction === slotDirection) return;
     scroll += delta;
-    if (Math.abs(scroll) >= (zooming ? 65 : 32) && now - lastWheelStep >= 115) {
-      if (zooming) changeZoom(-Math.sign(scroll));
-      else cycleSlot(Math.sign(scroll));
-      scroll = 0;
-      lastWheelStep = now;
+    if (zooming) {
+      if (Math.abs(scroll) < 65 || now - lastZoomStep < 115) return;
+      changeZoom(-direction);
+      lastZoomStep = now;
+    } else {
+      if (Math.abs(scroll) < 32) return;
+      cycleSlot(direction);
+      slotDirection = direction;
     }
+    scroll = 0;
   }
   canvas.addEventListener('wheel', handleWheel, { passive: false });
   node('hotbar').addEventListener('wheel', handleWheel, { passive: false });
@@ -577,6 +716,7 @@ export async function createControls(scene: Scene) {
       gameAction();
     } else if (Object.hasOwn(MOVES, key) && !placement) {
       event.preventDefault();
+      cancelHold();
       route = [];
       pendingTarget = null;
       selected = hovered = null;
@@ -593,6 +733,7 @@ export async function createControls(scene: Scene) {
     const direction = control.dataset.direction!;
     control.addEventListener('pointerdown', event => {
       event.preventDefault();
+      cancelHold();
       control.setPointerCapture(event.pointerId);
       route = [];
       pendingTarget = null;
@@ -631,12 +772,14 @@ export async function createControls(scene: Scene) {
 
   function refreshFrameClock() {
     previous = performance.now();
+    if (document.hidden) cancelHold();
     if (!saves.busy && (document.hidden || !document.hasFocus())) void saves.save(false);
   }
   document.addEventListener('visibilitychange', refreshFrameClock);
   window.addEventListener('focus', refreshFrameClock);
   window.addEventListener('blur', () => {
     keys.clear();
+    cancelHold();
     refreshFrameClock();
   });
   window.addEventListener('pagehide', () => { if (!saves.busy) void saves.save(false); });

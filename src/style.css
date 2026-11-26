@@ -7,6 +7,8 @@
   --reading: "Songti SC", "Noto Serif CJK SC", SimSun, serif;
 }
 
+#depth-scene { -webkit-touch-callout: none; }
+
 .place-name {
   position: absolute;
   top: max(var(--edge), env(safe-area-inset-top));
@@ -248,6 +250,7 @@
   .message { bottom: calc(var(--bottom) + 119px); }
   .dock button { min-height: 38px; padding-inline: 6px; }
   .paper-heading { min-height: 46px; margin-inline: 13px; }
+  .regional-map button { width: 20px; min-height: 20px; }
   .paper-heading h2 { font-size: 21px; }
   #sheet-body, #review-body { padding: 10px 13px 14px; }
   #sheet-status { padding-inline: 13px; }
