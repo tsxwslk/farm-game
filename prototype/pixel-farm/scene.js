@@ -61,8 +61,9 @@ window.startLiuwanScene = function ({layout, jobMeter, cropStage, cropArt, asset
     if (assetUrl(stump)) {
       sprites.stump = {file: stump, anchor: [24, 44], contact: 24};
     }
-    const waystone = 'assets/south-pass/waystone-48x48.png';
-    if (assetUrl(waystone)) sprites.waystone = {file: waystone, anchor: [24, 43], contact: 25};
+    if (southPass) {
+      sprites.waystone = {file: 'assets/south-pass/waystone-48x48.png', anchor: [24, 43], contact: 25};
+    }
   }
   const bedColors = {
     dry: '#754a24',
@@ -75,8 +76,7 @@ window.startLiuwanScene = function ({layout, jobMeter, cropStage, cropArt, asset
   const stageFor = cropStage ?? G.cropStage;
   const cropFiles = Object.fromEntries(Object.entries(cropArt ?? {radish: {art: 'cherry-radish'}})
     .flatMap(([crop, {art}]) => G.CROP_STAGES.filter(stage => stage.file)
-      .map(stage => [crop + '-' + stage.id, 'assets/' + art + '/' + stage.file]))
-    .filter(([, file]) => assetUrl(file)));
+      .map(stage => [crop + '-' + stage.id, 'assets/' + art + '/' + stage.file])));
   const chestTile = [9, 5];
   const chestPassage = [8, 5];
   const demoActors = [
@@ -163,12 +163,6 @@ window.startLiuwanScene = function ({layout, jobMeter, cropStage, cropArt, asset
       rect('#765238', -10, -12, 20, 10);
       rect('#b88f61', -9, -14, 18, 6);
       rect('#8f6947', -5, -12, 11, 2);
-    } else if (kind === 'waystone') {
-      rect('#504b42', -12, -6, 24, 6);
-      rect('#776f59', -9, -24, 18, 20);
-      rect('#b0a483', -7, -25, 12, 4);
-      rect('#a49876', -7, -21, 13, 12);
-      rect('#56634d', -10, -7, 8, 3);
     } else if (kind === 'mark') {
       const label = game.submitted ? actor.text : actor.hint;
       const width = label.length * 10 + 8;
@@ -249,16 +243,6 @@ window.startLiuwanScene = function ({layout, jobMeter, cropStage, cropArt, asset
       const scale = layout ? .67 : 1;
       scene.drawImage(image, x - Math.round(24 * scale), y - Math.round(66 * scale),
         Math.round(image.width * scale), Math.round(image.height * scale));
-    } else if (crop === 'pakChoi' && ['sprout', 'seedling', 'bulking', 'ripe'].includes(stage)) {
-      const size = {sprout: 4, seedling: 7, bulking: 10, ripe: 13}[stage];
-      scene.fillStyle = '#355840';
-      scene.fillRect(x - size, y - size, size * 2, Math.ceil(size * .65));
-      scene.fillRect(x - size + 2, y - size - 3, size * 2 - 4, 4);
-      scene.fillStyle = '#64894b';
-      scene.fillRect(x - size + 2, y - size - 1, size - 2, 4);
-      scene.fillRect(x + 2, y - size + 1, size - 4, 4);
-      scene.fillStyle = '#d5dcb7';
-      scene.fillRect(x - 2, y - size + 3, 4, size - 1);
     } else {
       scene.fillStyle = '#563d2a';
       scene.fillRect(x - 3, y - 1, 7, 3);

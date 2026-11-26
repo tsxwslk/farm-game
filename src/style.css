@@ -143,8 +143,10 @@
   object-fit: contain;
   image-rendering: pixelated;
 }
-.seed-packet > .stack-crop { inset: 27% auto auto 22%; width: 56%; height: 56%; }
-.pickled-crop > .stack-crop { inset: 2% auto auto 22%; width: 56%; height: 56%; }
+/* Crop layers use an 18×18 area within the 32×32 source canvas. */
+.stack-composite > .stack-crop { left: 21.875%; width: 56.25%; height: 56.25%; }
+.seed-packet > .stack-crop { top: 28.125%; }
+.pickled-crop > .stack-crop { top: 3.125%; }
 @media (min-width: 561px) {
   .hotbar .inventory-slot:has(.tool-icon) { --slot-icon-size: 32px; }
 }

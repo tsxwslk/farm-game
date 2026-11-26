@@ -18,17 +18,7 @@ const iconFiles: Partial<Record<Tool | Item, string>> = {
   crucian: 'assets/fish/crucian-32x32.png',
   fishSoup: 'assets/fish/crucian-soup-32x32.png',
 };
-const seedPacket: Pixel[] = [
-  [wood, 2, 1, 12, 14], ['#d1ab72', 3, 2, 10, 12], ['#e8cb91', 3, 3, 10, 1], ['#ecd4a1', 4, 4, 8, 9],
-];
-const pickleJar: Pixel[] = [
-  ['#745035', 2, 6, 12, 8], ['#9c6448', 3, 7, 10, 6], ['#6b472e', 1, 5, 14, 3],
-  ['#ddb271', 2, 5, 12, 2], ['#ae7952', 4, 6, 8, 2], ['#bb8659', 4, 10, 3, 3],
-];
-const pickleRim: Pixel[] = [
-  ['#744c31', 1, 8, 14, 2], ['#dfa871', 2, 8, 12, 1], ['#a96e49', 3, 9, 10, 1],
-];
-const pixels: Partial<Record<Tool | Item, Pixel[]>> = {
+const pixels: Partial<Record<Item, Pixel[]>> = {
   wood: [[wood, 2, 7, 11, 5], [lightWood, 3, 7, 8, 2], [wood, 4, 5, 10, 3], [lightWood, 5, 4, 7, 2],
     ['#e3b87b', 11, 8, 3, 3], ['#e3b87b', 12, 5, 2, 2]],
   stone: [[shadow, 2, 8, 12, 5], ['#797b6f', 3, 7, 10, 5], ['#a9aa95', 5, 5, 6, 4], ['#c2bdaa', 5, 5, 4, 1]],
@@ -36,26 +26,21 @@ const pixels: Partial<Record<Tool | Item, Pixel[]>> = {
   rockSalt: [[shadow, 2, 8, 12, 5], ['#81786f', 3, 7, 10, 5], ['#e0c3b8', 5, 6, 3, 4],
     ['#fff0dd', 6, 5, 2, 3], ['#f5dbc7', 9, 8, 3, 2]],
   salt: [[shadow, 2, 9, 12, 4], ['#a99c83', 3, 8, 10, 4], ['#e8dcca', 4, 7, 8, 3], ['#fbefdb', 6, 5, 4, 3]],
-  crucian: [[shadow, 3, 6, 10, 5], ['#a3b0a7', 5, 5, 7, 7], ['#cbd0b5', 6, 7, 7, 3],
-    ['#74867b', 2, 5, 3, 7], [shadow, 11, 7, 1, 1]],
-  fishSoup: [[wood, 2, 8, 12, 4], ['#dc9e5f', 3, 7, 10, 3], ['#ede1b2', 4, 8, 8, 2], ['#b68251', 4, 12, 8, 2]],
-  pakChoi: [['#355840', 3, 4, 10, 6], ['#729657', 5, 3, 6, 5], ['#b5c6a0', 5, 8, 6, 5],
-    ['#e1e2c1', 7, 8, 3, 6]],
 };
 
-function icon(file: string | undefined, fallback: Pixel[]) {
-  const url = file && assetUrl(file);
-  if (url) {
-    const image = document.createElement('img');
-    image.src = url;
-    image.alt = '';
-    return image;
-  }
+function imageIcon(file: string) {
+  const image = document.createElement('img');
+  image.src = assetUrl(file);
+  image.alt = '';
+  return image;
+}
+
+function pixelIcon(pixels: Pixel[]) {
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = 16;
   canvas.setAttribute('aria-hidden', 'true');
   const context = canvas.getContext('2d')!;
-  for (const [color, x, y, width, height] of fallback) {
+  for (const [color, x, y, width, height] of pixels) {
     context.fillStyle = color;
     context.fillRect(x, y, width, height);
   }
@@ -65,21 +50,22 @@ function icon(file: string | undefined, fallback: Pixel[]) {
 export function stackIcon(stack: Stack) {
   const crop = CROP_IDS.find(id => id === stack.id || CROPS[id].seed === stack.id || CROPS[id].pickle === stack.id);
   if (crop) {
-    const harvest = icon('assets/' + CROPS[crop].art + '/05-inventory.png', pixels[crop] ?? []);
+    const harvest = imageIcon('assets/' + CROPS[crop].art + '/05-inventory.png');
     if (crop === stack.id) return harvest;
     const isSeed = CROPS[crop].seed === stack.id;
     const container = document.createElement('span');
     container.className = 'stack-composite ' + (isSeed ? 'seed-packet' : 'pickled-crop');
     container.setAttribute('aria-hidden', 'true');
     harvest.className = 'stack-crop';
-    container.append(isSeed ? icon('assets/seed-bags/base-32x32.png', seedPacket)
-      : icon('assets/pickles/base-32x32.png', pickleJar), harvest);
-    if (!isSeed) container.append(icon('assets/pickles/rim-32x32.png', pickleRim));
+    container.append(imageIcon(isSeed ? 'assets/seed-bags/base-32x32.png' : 'assets/pickles/base-32x32.png'), harvest);
+    if (!isSeed) container.append(imageIcon('assets/pickles/rim-32x32.png'));
     return container;
   }
-  const picture = icon(iconFiles[stack.id], pixels[stack.id] ?? []);
-  if (stack.kind === 'tool' && picture instanceof HTMLImageElement) picture.className = 'tool-icon';
-  return picture;
+  const file = iconFiles[stack.id];
+  if (!file) return pixelIcon((stack.kind === 'item' && pixels[stack.id]) || []);
+  const image = imageIcon(file);
+  if (stack.kind === 'tool') image.className = 'tool-icon';
+  return image;
 }
 
 export function describeSlot(game: Game, stack: Stack) {
