@@ -1,18 +1,19 @@
 import {
-  COMMISSIONS, CROPS, CROP_IDS, ENTRIES, HOTBAR_COLUMNS, INVENTORY_INFO, ITEMS, KILN_COST, LIUWAN_ROWS,
-  RECIPES, RESOURCES, SOUTH_PASS, STATIONS, TRACE_IDS, TRACES, TRADE, WAREHOUSE_SLOTS, WATER_CAPACITY,
-  type CommissionId, type EntryId, type Point, type Recipe, type RecipeId, type Station,
+  BUILD_COSTS, COMMISSIONS, CROPS, CROP_FAMILIES, CROP_IDS, ENTRIES, HOTBAR_COLUMNS, INVENTORY_INFO, ITEMS, LIUWAN_ROWS, QUALITIES, QUALITY_LABELS,
+  RECIPES, RESOURCES, SOUTH_PASS, STATIONS, TRACE_IDS, TRACES, TRADE, WAREHOUSE_SLOTS, WATER_CAPACITY, isCrop, isSeedTradeItem,
+  type CommissionId, type EntryId, type Point, type Quality, type Recipe, type RecipeId, type Station,
 } from './content';
 import {
   canBuild, canSubmit, canTravel, claimJob, claimTraceSeed, claimPakChoiSeeds, claimSeed, commissionStatus, costs, deliverCommission, expandStorage,
-  hasMaterials, jobMeter, needsSeed, restoreTrace, saveSeed, startJob, storageUpgrade, submit, traceVisible, trade, tradeLimit, warnSale,
+  growthStatus, hasMaterials, jobMeter, needsSeed, restoreTrace, saveSeed, seedStockFor, startJob, storageUpgrade, submit, traceVisible, trade, tradeLimit, tradePrice, warnSale,
   type Game, type TradeItem,
 } from './game';
-import type { World } from './scene';
+import type { Plot, World } from './scene';
 import { makeSlotRow, stackIcon } from './hotbar';
 import { bindInventoryDrag } from './inventory-drag';
-import { count, stackCount, stackName, type SlotAddress, type Stack, type Storage } from './inventory';
+import { count, equippedStack, stackCount, stackName, type SlotAddress, type Stack, type Storage } from './inventory';
 import { FORECAST_DAYS, liuwanWeather, WEATHER_LABELS } from './weather';
+import { compostGain, cropStreak, harvestQuality, QUALITY_THRESHOLDS } from './soil';
 
 export function node<T extends HTMLElement = HTMLElement>(id: string) {
   return document.getElementById(id) as T;
@@ -52,7 +53,8 @@ function renderItemCard(card: HTMLElement, game: Game, item: Stack) {
   const identity = element('div');
   const amount = item.kind === 'item' ? ' · ×' + stackCount(item) :
     item.id === 'can' ? ' · 水量 ' + game.water + '/' + WATER_CAPACITY : '';
-  identity.append(element('p', category + amount, 'item-card-meta'), element('h3', stackName(item)));
+  const grade = item.kind === 'item' && isCrop(item.id) ? ' · ' + QUALITY_LABELS[item.quality ?? 'normal'] : '';
+  identity.append(element('p', category + amount + grade, 'item-card-meta'), element('h3', stackName(item)));
   heading.append(picture, identity);
   card.replaceChildren(heading, element('p', description, 'item-card-description'));
 }
@@ -89,7 +91,7 @@ export function bindHotbarItemCard(hotbar: HTMLElement, current: () => Game) {
     const game = current();
     const item = game.bag[Number(anchor.dataset.index)];
     if (!item || anchor.closest('[hidden]')) return dismiss();
-    const key = item.id + ':' + (item.kind === 'item' ? stackCount(item) : game.water);
+    const key = item.id + ':' + (item.kind === 'item' ? stackCount(item) + ':' + (item.quality ?? '') : game.water);
     if (key === previewKey) return;
     previewKey = key;
     renderItemCard(card, game, item);
@@ -263,19 +265,45 @@ export function inventoryPanel(game: Game, warehouse: { page: number; turn: (pag
   if (source) queueMicrotask(() => { if (layout.isConnected) showCard(source); });
   if (warehouse) return [layout];
   const crafting = element('ul', undefined, 'sheet-list');
-  crafting.append(
-    listRow('盐灶 · ' + costs(KILN_COST),
-      button(game.stations.kiln ? '已摆放' : count(game, 'kiln') || count(game, 'kiln', 'warehouse') ? '已收起' : '选址',
-        () => placement('kiln'), !canBuild(game, 'kiln'))),
-    listRow('腌菜缸 · 在盐灶烧制', button(game.stations.jar ? '已摆放' : '摆放', () => placement('jar'), !canBuild(game, 'jar'))),
-  );
+  for (const station of Object.keys(STATIONS) as Station[]) {
+    const materials = BUILD_COSTS[station];
+    const placed = Object.values(game.stations).filter(({ kind }) => kind === station).length;
+    const detail = materials ? costs(materials) : '在火灶烧制';
+    crafting.append(listRow(STATIONS[station] + ' · ' + detail + (placed ? ' · 已摆放 ' + placed : ''),
+      button(materials ? '选址' : '摆放',
+        () => placement(station), !canBuild(game, station))));
+  }
   return [layout, element('h3', '制作与摆放', 'section-title'), crafting];
 }
 
-export function stationPanel(game: Game, station: Station, update: (message: string) => void,
+export function soilPanel(game: Game, plot: Plot) {
+  const { soil } = plot;
+  const rows = element('dl', undefined, 'soil-readings');
+  const add = (label: string, value: string) => rows.append(element('dt', label), element('dd', value));
+  add('主养分', soil.nutrients + ' / 100');
+  add('菌群健康', soil.microbes + ' / 100');
+  add('地表湿润', liuwanWeather(game.day) === 'rain' || plot.watered !== null ? '湿润' : '干燥');
+  add('上一茬', soil.lastCrop ? ITEMS[soil.lastCrop] + ' · ' + CROP_FAMILIES[CROPS[soil.lastCrop].family] : '暂无记录');
+  add('同科连续茬数', String(soil.streak));
+  const held = equippedStack(game);
+  const crop = plot.crop ?? CROP_IDS.find(id => CROPS[id].seed === held?.id);
+  if (crop) {
+    add(plot.crop ? '当前作物' : '准备播种', ITEMS[crop] + ' · ' + CROP_FAMILIES[CROPS[crop].family]);
+    add('预计品质', QUALITY_LABELS[harvestQuality(soil, crop)] + (cropStreak(soil, crop) >= 2 ? ' · 同科连作' : ''));
+  }
+  const growth = plot.crop && plot.watered === null ? '等待浇水。' : growthStatus(game, plot);
+  const gain = compostGain(soil);
+  const hint = element('p', plot.crop ? '收获后可换科、休耕或施堆肥。' :
+    '留空一整天可恢复土壤并解除连作。选中堆肥再操作这格地，可恢复主养分 ' + gain.nutrients + '、菌群 ' + gain.microbes + '。', 'sheet-note');
+  const grades = element('p', '两项土壤读数都达到 ' + QUALITY_THRESHOLDS.fine + ' 才能收获优质。任一低于 ' +
+    QUALITY_THRESHOLDS.good + ' 时为普通。同科连作最高为良好。', 'sheet-note');
+  return growth ? [rows, element('p', growth, 'sheet-note'), grades, hint] : [rows, grades, hint];
+}
+
+export function stationPanel(game: Game, key: string, update: (message: string) => void,
   pack: () => void) {
   const list = element('ul', undefined, 'sheet-list');
-  const job = game.jobs[station];
+  const { kind, job } = game.stations[key];
   if (job) {
     const recipe = RECIPES[job.recipe];
     const remaining = element('p', undefined, 'sheet-note');
@@ -283,7 +311,7 @@ export function stationPanel(game: Game, station: Station, update: (message: str
     if (job.ready) {
       remaining.textContent = '成品待领取';
       return [remaining, button('领取' + ITEMS[recipe.output] + ' ×' + recipe.outputQuantity,
-        () => update(claimJob(game, station)), false, true)];
+        () => update(claimJob(game, key)), false, true)];
     }
     const meter = element('progress', undefined, 'job-progress');
     meter.id = 'job-progress';
@@ -296,14 +324,14 @@ export function stationPanel(game: Game, station: Station, update: (message: str
   }
   for (const id of Object.keys(RECIPES) as RecipeId[]) {
     const recipe: Recipe = RECIPES[id];
-    if (recipe.station !== station || (id === 'fishSoup' && !game.entries.crucian) ||
+    if (recipe.station !== kind || (id === 'fishSoup' && !game.entries.crucian) ||
       (recipe.requiresTrace && game.traces[recipe.requiresTrace] !== 'restored') ||
       (recipe.requiresArchive && !game.submitted)) continue;
     list.append(listRow(recipe.label + ' · ' + costs(recipe.inputs) + ' → ' + ITEMS[recipe.output] + ' ×' + recipe.outputQuantity,
-      button('开工', () => update(startJob(game, id)), !hasMaterials(game, recipe.inputs), true)));
+      button('开工', () => update(startJob(game, key, id)), !hasMaterials(game, recipe.inputs), true)));
   }
   const actions = element('div', undefined, 'sheet-actions');
-  actions.append(button('收起' + STATIONS[station], pack));
+  actions.append(button('收起' + STATIONS[kind], pack));
   return [list, element('p', '可长按空闲设施收进背包。', 'sheet-note'), actions];
 }
 
@@ -416,18 +444,29 @@ export class TradingBook {
       const available = element('span');
       stock.push([id, available]);
       row.append(setPressed(button(ITEMS[id], () => { this.item = id; redraw(); }), id === this.item),
-        element('span', price + ' 文'), available);
+        element('span', price + ' 文' + (isCrop(id) ? '起' : '')), available);
       list.append(row);
     }
     const id = this.item;
-    const buying = id === 'seeds' || id === 'pakChoiSeeds';
-    const price = buying ? TRADE.buy[id] : TRADE.sell[id];
+    const buying = isSeedTradeItem(id);
+    const graded = isCrop(id);
+    const grade = element('select');
+    grade.id = 'trade-quality';
+    let quality: Quality = graded ? QUALITIES.find(value => count(game, id, 'bag', value) > 0) ?? 'normal' : 'normal';
+    if (graded) {
+      for (const value of QUALITIES) {
+        const option = element('option', QUALITY_LABELS[value] + ' · ' + tradePrice(id, value) + ' 文/份');
+        option.value = value;
+        grade.append(option);
+      }
+      grade.value = quality;
+    }
     const form = element('form', undefined, 'trade-form');
     const label = element('label', '数量');
     const quantity = element('input');
     quantity.inputMode = 'numeric';
     quantity.autocomplete = 'off';
-    quantity.value = tradeLimit(game, id) ? '1' : '';
+    quantity.value = tradeLimit(game, id, quality) ? '1' : '';
     quantity.setAttribute('aria-describedby', 'trade-limit');
     label.htmlFor = quantity.id = 'trade-quantity';
     const valueOf = () => {
@@ -436,7 +475,7 @@ export class TradingBook {
     };
     const adjust = (delta: number) => {
       const value = valueOf();
-      const limit = tradeLimit(game, id);
+      const limit = tradeLimit(game, id, quality);
       if (!limit) return;
       quantity.value = String(Math.min(limit, Math.max(1, (Number.isSafeInteger(value) ? value : 0) + delta)));
       this.refresh();
@@ -460,21 +499,21 @@ export class TradingBook {
     };
     this.refresh = () => {
       const value = valueOf();
+      const price = tradePrice(id, quality);
       const hasQuote = Number.isSafeInteger(value) && Number.isSafeInteger(value * price) && value >= 1;
-      const limit = tradeLimit(game, id);
+      const limit = tradeLimit(game, id, quality);
       const valid = hasQuote && value <= limit;
       confirm.disabled = !valid;
       subtract.disabled = !limit || !hasQuote || value <= 1;
       add.disabled = !limit || (hasQuote && value >= limit);
       updateText(total, '合计 ' + (hasQuote ? value * price : 0) + ' 文');
-      warning.hidden = !valid || !warnSale(game, id, value);
+      warning.hidden = !valid || !warnSale(game, id, value, quality);
       updateText(limitNote, buying
         ? limit ? '当前最多可买 ' + limit + ' 粒。' : '当前无可买数量，请查看库存、钱袋或背包。'
         : limit ? '当前最多可卖 ' + limit + ' 份。' : '背包无可出售的此物。');
       updateText(balance, '钱袋 ' + game.coins + ' 文');
       for (const [item, available] of stock) {
-        updateText(available, String(item === 'seeds' ? game.seedStock :
-          item === 'pakChoiSeeds' ? game.pakChoiSeedStock : count(game, item)));
+        updateText(available, String(isSeedTradeItem(item) ? seedStockFor(game, item) : count(game, item)));
       }
       seed.hidden = !needsSeed(game);
       updateText(archive, game.submitted ? '第一卷已归档' : '归档柳湾第一卷');
@@ -494,11 +533,21 @@ export class TradingBook {
       quantity.setRangeText(digit, quantity.selectionStart ?? end, end, 'end');
       this.refresh();
     });
+    if (graded) {
+      const gradeLabel = element('label', '品质', 'trade-quality');
+      gradeLabel.append(grade);
+      form.append(gradeLabel);
+      grade.addEventListener('change', () => {
+        quality = grade.value as Quality;
+        quantity.value = tradeLimit(game, id, quality) ? '1' : '';
+        this.refresh();
+      });
+    }
     form.append(stepper, total, confirm);
     form.addEventListener('submit', event => {
       event.preventDefault();
       if (confirm.disabled) return;
-      const result = trade(game, id, valueOf());
+      const result = trade(game, id, valueOf(), quality);
       if (result.ok) quantity.value = '';
       this.refresh();
       report(result.message);
@@ -578,6 +627,10 @@ export function ledgerPanel(game: Game, selected: EntryId, select: (id: EntryId)
   status.classList.toggle('ledger-status-lit', Boolean(entry?.lit));
   description.append(element('h3', ITEMS[selected]), status,
     element('p', entry ? rule.use : rule.clue));
+  if (isCrop(selected)) {
+    const grades = QUALITIES.filter(grade => entry?.qualities?.includes(grade)).map(grade => QUALITY_LABELS[grade]);
+    if (grades.length) description.append(element('p', '已收获品质 · ' + grades.join('、'), 'ledger-status'));
+  }
   if (entry?.lit && rule.reward) description.append(element('p', '已结稿酬 ' + rule.reward + ' 文', 'ledger-status'));
   if (entry?.deadline !== null && entry?.deadline !== undefined && !entry.lit) {
     const remaining = element('p', undefined, 'ledger-status');
@@ -636,8 +689,8 @@ export function mapPanel(world: World, game: Game, ripples: Point[]) {
     if (game.entries.rockSalt) marker('岩盐发现处', ...RESOURCES['buried-salt'].tile, '盐');
     if (traceVisible(game, 'mustard')) marker('旧制盐台西侧 · 芥菜余绪', ...TRACES.mustard.tile, '绪');
     if (game.submitted) marker(canTravel(game) ? '南山道入口' : '南山道 · 备齐行粮后开放', ...SOUTH_PASS.gate, '道');
-    for (const [station, position] of Object.entries(game.stations) as [Station, [number, number]][]) {
-      marker(STATIONS[station], ...position, station === 'kiln' ? '灶' : '缸');
+    for (const { kind, tile } of Object.values(game.stations)) {
+      marker(STATIONS[kind], ...tile, { kiln: '灶', jar: '缸', compostShed: '肥' }[kind]);
     }
   }
   marker('当前位置', ...game.position, '●', 'map-player');

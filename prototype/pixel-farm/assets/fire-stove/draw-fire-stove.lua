@@ -1,4 +1,4 @@
--- Run with aseprite.exe --batch --script draw-salt-stove.lua.
+-- Run with aseprite.exe --batch --script draw-fire-stove.lua.
 local output = app.fs.filePath(debug.getinfo(1, "S").source:sub(2))
 local palette = {
   edge = 0x3B332E, mortar = 0x5B4D42,
@@ -154,7 +154,7 @@ end)
 local placement = scene:newSlice(Rectangle(0, 0, 48, 48))
 placement.name = "Placement"
 placement.pivot = Point(24, 44)
-save(scene, "salt-stove-scene-48x48")
+save(scene, "fire-stove-scene-48x48")
 
 local icon = Sprite(16, 16, ColorMode.RGB)
 local tones = {
@@ -194,4 +194,4 @@ iconLayer("Iron lid", 3, {
 iconLayer("Lid handle", 1, {
   {6,"rrr"}, {5,"rh.rr"}, {5,"g...v"}, {5,"rr.vr"},
 })
-save(icon, "salt-stove-inventory-16x16")
+save(icon, "fire-stove-inventory-16x16")

@@ -21,7 +21,7 @@
   };
   const ENTRIES = {
     radish: {reward: 55, duration: 360, hint: '收获后在菜瓮里腌成盐渍樱桃萝卜。'},
-    rockSalt: {reward: 45, duration: 720, hint: '先用盐灶制成粗盐，再用这批粗盐腌菜。'},
+    rockSalt: {reward: 45, duration: 720, hint: '先用火灶制成粗盐，再用这批粗盐腌菜。'},
     pickle: {reward: 30, hint: '用樱桃萝卜和粗盐制成。'},
   };
 

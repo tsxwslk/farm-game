@@ -10,7 +10,7 @@ export const ITEMS = {
   stone: '石材',
   clay: '黏土',
   crock: '腌菜缸',
-  kiln: '盐灶',
+  kiln: '火灶',
   crucian: '鲫鱼',
   fishSoup: '鲫鱼汤',
   pakChoiSeeds: '小白菜种子',
@@ -24,6 +24,12 @@ export const ITEMS = {
   perillaSeeds: '紫苏种子',
   perilla: '紫苏',
   perillaSoup: '紫苏鲫鱼汤',
+  peaSeeds: '豌豆种子',
+  pea: '豌豆',
+  saltedPeas: '盐水豌豆',
+  plantScraps: '植物残料',
+  compost: '堆肥',
+  compostShed: '堆肥棚',
 } as const;
 export type Item = keyof typeof ITEMS;
 
@@ -44,12 +50,12 @@ export const INVENTORY_INFO = {
   axe: ['农具', '砍柳树、橡树或清理树桩，取得木材。'],
   seeds: ['种子', '播在翻好的菜畦里，浇水后开始发芽。'],
   radish: ['作物', '可以留种、卖给田记所，或和粗盐一起腌制。'],
-  rockSalt: ['矿物', '带灰白纹的盐矿，可在盐灶熬成一批粗盐。'],
+  rockSalt: ['矿物', '带灰白纹的盐矿，可在火灶熬成一批粗盐。'],
   salt: ['加工材料', '由岩盐熬制，可用于腌萝卜和炖鲫鱼汤。'],
   pickle: ['加工品', '用粗盐腌成的樱桃萝卜，可卖给田记所。'],
-  wood: ['建材', '从树木和树桩取得，用于搭建盐灶和烧制腌菜缸。'],
-  stone: ['建材', '从普通岩石取得，可用来搭建盐灶。'],
-  clay: ['建材', '河岸挖出的细土，可在盐灶烧制成腌菜缸。'],
+  wood: ['建材', '从树木和树桩取得，用于搭建火灶和烧制腌菜缸。'],
+  stone: ['建材', '从普通岩石取得，可用来搭建火灶。'],
+  clay: ['建材', '河岸挖出的细土，可在火灶烧制成腌菜缸。'],
   crock: ['设施', '摆在可达的空地上，可用粗盐腌制樱桃萝卜。'],
   kiln: ['设施', '摆在可达的空地上，可制盐、烧缸和炖鱼汤。'],
   crucian: ['鱼获', '从柳湾河钓得，可加粗盐炖汤，也可卖给田记所。'],
@@ -65,6 +71,12 @@ export const INVENTORY_INFO = {
   perillaSeeds: ['种子', '在田记所复原所得，可在柳湾菜畦里播种。'],
   perilla: ['作物', '可留种，也可加鲫鱼和粗盐炖汤。'],
   perillaSoup: ['加工品', '用紫苏、鲫鱼和粗盐炖成的一碗汤。'],
+  peaSeeds: ['种子', '可在田记所买入。豆科作物能给菜畦补回一部分主养分。'],
+  pea: ['作物', '一份鲜豌豆荚，可留种、出售或在火灶煮成盐水豌豆。'],
+  saltedPeas: ['加工品', '用粗盐煮熟的豌豆，可卖给田记所。'],
+  plantScraps: ['材料', '随作物一起收获，可在堆肥棚里制成堆肥。'],
+  compost: ['肥料', '选中后给尚未播种的菜畦施用，恢复主养分和菌群健康。'],
+  compostShed: ['设施', '摆在可达空地上，用植物残料制取堆肥。'],
 } as const satisfies Record<Item | Tool, readonly [string, string]>;
 
 export const HOTBAR_COLUMNS = 8;
@@ -75,21 +87,38 @@ export const MAX_BAG_SLOTS = BAG_SLOTS + HOTBAR_COLUMNS * BAG_UPGRADE_PRICES.len
 export const WAREHOUSE_UPGRADE = { firstPrice: 80, priceStep: 40 } as const;
 export const STARTING_TOOLS = ['hoe', 'pick', 'can', 'axe', 'rod'] as const satisfies readonly Tool[];
 
-export const STATIONS = { kiln: '盐灶', jar: '腌菜缸' } as const;
+export const STATIONS = { kiln: '火灶', jar: '腌菜缸', compostShed: '堆肥棚' } as const;
 export type Station = keyof typeof STATIONS;
-export const STATION_ITEMS = { kiln: 'kiln', jar: 'crock' } as const satisfies Record<Station, Item>;
-export const KILN_COST = { stone: 4, wood: 2 };
+export function isStation(kind: string): kind is Station {
+  return Object.hasOwn(STATIONS, kind);
+}
+export const STATION_ITEMS = { kiln: 'kiln', jar: 'crock', compostShed: 'compostShed' } as const satisfies Record<Station, Item>;
+export const BUILD_COSTS: Partial<Record<Station, Partial<Record<Item, number>>>> = {
+  kiln: { stone: 4, wood: 2 },
+  compostShed: { wood: 4, stone: 2 },
+};
+
+export const CROP_FAMILIES = { brassica: '十字花科', mint: '唇形科', legume: '豆科' } as const;
+export type CropFamily = keyof typeof CROP_FAMILIES;
+export const QUALITIES = ['normal', 'good', 'fine'] as const;
+export type Quality = typeof QUALITIES[number];
+export const QUALITY_LABELS: Record<Quality, string> = { normal: '普通', good: '良好', fine: '优质' };
 
 export const CROPS = {
-  radish: { seed: 'seeds', seedYield: 2, pickle: 'pickle', art: 'cherry-radish', stages: [35, 90, 180, 300], middleLabel: '根部膨大' },
-  pakChoi: { seed: 'pakChoiSeeds', seedYield: 2, pickle: 'pakChoiPickle', art: 'pak-choi', stages: [45, 110, 230, 360], middleLabel: '叶丛展开' },
-  mustard: { seed: 'mustardSeeds', seedYield: 2, pickle: 'mustardPickle', art: 'mustard', stages: [40, 95, 200, 320], middleLabel: '锯齿叶展开' },
-  perilla: { seed: 'perillaSeeds', seedYield: 2, art: 'perilla', stages: [45, 120, 250, 380], middleLabel: '对生叶展开' },
+  radish: { family: 'brassica', nutrients: -12, seed: 'seeds', seedYield: 2, pickle: 'pickle', art: 'cherry-radish', stages: [35, 90, 180, 300], middleLabel: '根部膨大' },
+  pakChoi: { family: 'brassica', nutrients: -14, seed: 'pakChoiSeeds', seedYield: 2, pickle: 'pakChoiPickle', art: 'pak-choi', stages: [45, 110, 230, 360], middleLabel: '叶丛展开' },
+  mustard: { family: 'brassica', nutrients: -14, seed: 'mustardSeeds', seedYield: 2, pickle: 'mustardPickle', art: 'mustard', stages: [40, 95, 200, 320], middleLabel: '锯齿叶展开' },
+  perilla: { family: 'mint', nutrients: -10, seed: 'perillaSeeds', seedYield: 2, art: 'perilla', stages: [45, 120, 250, 380], middleLabel: '对生叶展开' },
+  pea: { family: 'legume', nutrients: 12, seed: 'peaSeeds', seedYield: 2, art: 'peas', stages: [45, 105, 215, 330], middleLabel: '卷须开花' },
 } as const satisfies Record<string, {
-  seed: Item; seedYield: number; pickle?: Item; art: string; stages: readonly [number, number, number, number]; middleLabel: string;
+  family: CropFamily; nutrients: number; seed: Item; seedYield: number; pickle?: Item; art: string;
+  stages: readonly [number, number, number, number]; middleLabel: string;
 }>;
 export type CropId = keyof typeof CROPS;
 export const CROP_IDS = Object.keys(CROPS) as CropId[];
+export function isCrop(item: Item): item is CropId {
+  return Object.hasOwn(CROPS, item);
+}
 
 export interface Recipe<Collected extends Item = EntryId> {
   label: string;
@@ -136,6 +165,13 @@ export const RECIPES = {
     duration: 60, timedInputs: ['perilla'], anchors: [{ input: 'perilla', entry: 'perilla' }], outputEntry: 'perillaSoup',
     requiresTrace: 'perilla',
   },
+  saltedPeas: {
+    label: '煮盐水豌豆', station: 'kiln', inputs: { pea: 1, salt: 1 }, output: 'saltedPeas', outputQuantity: 1,
+    duration: 45, timedInputs: ['pea'], anchors: [{ input: 'pea', entry: 'pea' }], outputEntry: 'saltedPeas',
+  },
+  compost: {
+    label: '腐熟堆肥', station: 'compostShed', inputs: { plantScraps: 3 }, output: 'compost', outputQuantity: 1, duration: 120,
+  },
 } as const satisfies Record<string, Recipe<Item>>;
 export type RecipeId = keyof typeof RECIPES;
 
@@ -158,31 +194,36 @@ export const ENTRIES = {
   perilla: {
     section: '草木册', reward: 60, duration: 480,
     clue: '去南山道路碑东边找石阶药圃。霾天或每日 18:00 后可采到紫苏余绪。',
-    use: '用一份紫苏、一条鲫鱼和一份粗盐，在盐灶炖成紫苏鲫鱼汤。',
+    use: '用一份紫苏、一条鲫鱼和一份粗盐，在火灶炖成紫苏鲫鱼汤。',
   },
   rockSalt: {
     section: '矿物册', reward: 45, duration: 720,
     clue: '从田记所东边沿小径往北，经林缘向东走。旧制盐台旁的岩石露着灰白纹。',
-    use: `用盐灶把岩盐 ×${RECIPES.salt.inputs.rockSalt} 熬成粗盐 ×${RECIPES.salt.outputQuantity}，再用这批盐腌萝卜。`,
+    use: `用火灶把岩盐 ×${RECIPES.salt.inputs.rockSalt} 熬成粗盐 ×${RECIPES.salt.outputQuantity}，再用这批盐腌萝卜。`,
+  },
+  pea: {
+    section: '草木册', reward: 45, duration: 360,
+    clue: '田记所的货箱留有豌豆种子，买入页也常备种源。可与十字花科作物轮作。',
+    use: '在火灶把一份豌豆和一份粗盐煮成盐水豌豆。',
   },
   clay: {
     section: '矿物册', reward: 0, duration: 0,
     clue: '沿河岸找偏灰褐的裸土，用锄头挖掘。',
-    use: '盐灶加盖烧制，三份黏土与一份木材可做一只腌菜缸。',
+    use: '火灶加盖烧制，三份黏土与一份木材可做一只腌菜缸。',
   },
   crucian: {
     section: '水族册', reward: 35, duration: 480,
     clue: '带钓竿去柳湾河岸抛竿。水面出现涟漪的地方更容易咬钩。',
-    use: `把鲫鱼 ×${RECIPES.fishSoup.inputs.crucian} 和粗盐 ×${RECIPES.fishSoup.inputs.salt} 放进盐灶炖汤。`,
+    use: `把鲫鱼 ×${RECIPES.fishSoup.inputs.crucian} 和粗盐 ×${RECIPES.fishSoup.inputs.salt} 放进火灶炖汤。`,
   },
   salt: {
     section: '加工品册', reward: 0, duration: 0,
-    clue: `在盐灶用岩盐 ×${RECIPES.salt.inputs.rockSalt} 熬制粗盐。`,
+    clue: `在火灶用岩盐 ×${RECIPES.salt.inputs.rockSalt} 熬制粗盐。`,
     use: '熬出的粗盐可用来腌菜和炖汤。',
   },
   fishSoup: {
     section: '加工品册', reward: 0, duration: 0,
-    clue: `在盐灶用鲫鱼 ×${RECIPES.fishSoup.inputs.crucian} 和粗盐 ×${RECIPES.fishSoup.inputs.salt} 炖汤。`,
+    clue: `在火灶用鲫鱼 ×${RECIPES.fishSoup.inputs.crucian} 和粗盐 ×${RECIPES.fishSoup.inputs.salt} 炖汤。`,
     use: '制成的鲫鱼汤可卖给田记所。',
   },
   pickle: {
@@ -202,14 +243,25 @@ export const ENTRIES = {
   },
   perillaSoup: {
     section: '加工品册', reward: 35, duration: 0,
-    clue: '复原紫苏、种植并收获后，在盐灶用紫苏、鲫鱼和粗盐炖汤。',
+    clue: '复原紫苏、种植并收获后，在火灶用紫苏、鲫鱼和粗盐炖汤。',
     use: '紫苏和鲫鱼同炖，续上了石阶药圃旧时的一道用法。',
+  },
+  saltedPeas: {
+    section: '加工品册', reward: 20, duration: 0,
+    clue: '用火灶和粗盐煮熟豌豆。',
+    use: '带荚煮熟，沥去盐水后可卖给田记所。',
   },
 } as const;
 export type EntryId = keyof typeof ENTRIES;
 
-export const TRADE = { sell: { radish: 12, pickle: 30, crucian: 16, fishSoup: 26, pakChoi: 14, pakChoiPickle: 30 },
-  buy: { seeds: 6, pakChoiSeeds: 7 }, dailySeeds: 6 } as const;
+export const TRADE = {
+  sell: { radish: 12, pickle: 30, crucian: 16, fishSoup: 26, pakChoi: 14, pakChoiPickle: 30, pea: 12, saltedPeas: 22 },
+  buy: { seeds: 6, pakChoiSeeds: 7, peaSeeds: 6 }, dailySeeds: 6,
+} as const;
+export type SeedTradeItem = keyof typeof TRADE.buy;
+export function isSeedTradeItem(item: Item): item is SeedTradeItem {
+  return Object.hasOwn(TRADE.buy, item);
+}
 export const STARTING_SEEDS = 3;
 export const COMMISSIONS = {
   radishStock: { name: '萝卜补库', item: 'radish', quantity: 2, reward: 30 },

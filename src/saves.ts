@@ -1,9 +1,10 @@
 import * as z from 'zod';
 import { BAG_SLOTS, CROP_IDS, ENTRIES, HOTBAR_COLUMNS, ITEMS, LIUWAN_ROWS, MAX_BAG_SLOTS, RECIPES, RESOURCES, SOUTH_PASS, STARTING_TOOLS, STATIONS,
-  TILL_HITS, TOOLS, TRACE_IDS, TRACE_STATES, TRACES, TRADE, WAREHOUSE_SLOTS, WATER_CAPACITY, type Tool } from './content';
-import { canTravel, DAY, SAVE_VERSION, waterByRain, type Game } from './game';
+  QUALITIES, TILL_HITS, TOOLS, TRACE_IDS, TRACE_STATES, TRACES, TRADE, WAREHOUSE_SLOTS, WATER_CAPACITY, isCrop, type Tool } from './content';
+import { canTravel, DAY, SAVE_VERSION, stationKey, waterByRain, type Game } from './game';
 import { count, equippedTool, startingInventory } from './inventory';
 import type { Plot, World } from './scene';
+import { newSoil } from './soil';
 
 const whole = z.int().nonnegative();
 const minute = z.number().nonnegative();
@@ -14,23 +15,28 @@ const item = z.enum(Object.keys(ITEMS) as (keyof typeof ITEMS)[]);
 const entryId = z.enum(Object.keys(ENTRIES) as (keyof typeof ENTRIES)[]);
 const station = z.enum(Object.keys(STATIONS) as (keyof typeof STATIONS)[]);
 const recipe = z.enum(Object.keys(RECIPES) as (keyof typeof RECIPES)[]);
+const jobSchema = z.strictObject({
+  recipe, started: minute, at: minute, ready: z.boolean(), deadlines: z.partialRecord(item, deadline),
+});
 const oldPlot = z.strictObject({ tilled: z.boolean(), planted: deadline, watered: deadline });
 
 const batches = z.array(z.strictObject({ quantity: whole.min(1), deadline })).min(1);
+const toolStack = z.strictObject({ kind: z.literal('tool'), id: tool });
+const itemStack = z.strictObject({ kind: z.literal('item'), id: item, batches });
 const stack = z.discriminatedUnion('kind', [
-  z.strictObject({ kind: z.literal('tool'), id: tool }),
-  z.strictObject({ kind: z.literal('item'), id: item, batches }),
+  toolStack, itemStack,
 ]).nullable();
+const quality = z.enum(QUALITIES);
+const gradedStack = z.discriminatedUnion('kind', [toolStack, itemStack.extend({ quality: quality.optional() })]).nullable();
+const entry = z.strictObject({ lit: z.boolean(), deadline });
 
 const gameFields = {
   day: whole.min(1), minute, review: z.boolean(), position: point,
   water: whole.max(WATER_CAPACITY), coins: whole,
   plots: z.array(oldPlot),
   stations: z.partialRecord(station, point),
-  entries: z.partialRecord(entryId, z.strictObject({ lit: z.boolean(), deadline })),
-  jobs: z.partialRecord(station, z.strictObject({
-    recipe, started: minute, at: minute, ready: z.boolean(), deadlines: z.partialRecord(item, deadline),
-  })),
+  entries: z.partialRecord(entryId, entry),
+  jobs: z.partialRecord(station, jobSchema),
   strikes: z.record(z.string(), whole.min(1)),
   depleted: z.record(z.string(), whole.min(1)),
   action: z.strictObject({ key: z.string(), tool, at: minute }).nullable(),
@@ -44,9 +50,10 @@ const previousGame = z.strictObject({
   equippedSlot: whole.max(BAG_SLOTS - 1).nullable(),
   bag: z.array(stack).length(BAG_SLOTS), warehouse: z.array(stack).length(WAREHOUSE_SLOTS),
 });
+const cropPlot = oldPlot.extend({ crop: z.enum(CROP_IDS).nullable() });
 const gameV7 = previousGame.extend({
   schemaVersion: z.literal(7),
-  plots: z.array(oldPlot.extend({ crop: z.enum(CROP_IDS).nullable() })),
+  plots: z.array(cropPlot),
   commissions: z.strictObject({ radishStockDay: whole, trailFood: z.boolean() }),
 });
 const gameV8 = gameV7.extend({
@@ -62,9 +69,26 @@ const gameV9 = gameV8.extend({
   mustardTrace: traceState,
   pakChoiSeedStock: whole.max(TRADE.dailySeeds),
 });
-const gameSchema = gameV9.omit({ mustardTrace: true }).extend({
-  schemaVersion: z.literal(SAVE_VERSION),
+const gameV10 = gameV9.omit({ mustardTrace: true }).extend({
+  schemaVersion: z.literal(10),
   traces: z.record(z.enum(TRACE_IDS), traceState),
+});
+const gameV11 = gameV10.extend({
+  schemaVersion: z.literal(11),
+  plots: z.array(cropPlot.extend({
+    soil: z.strictObject({
+      nutrients: whole.max(100), microbes: whole.max(100), lastCrop: z.enum(CROP_IDS).nullable(),
+      streak: whole, vacantSince: deadline,
+    }),
+  })),
+  bag: z.array(gradedStack).min(BAG_SLOTS).max(MAX_BAG_SLOTS).refine(slots => slots.length % HOTBAR_COLUMNS === 0),
+  warehouse: z.array(gradedStack).min(WAREHOUSE_SLOTS).refine(slots => slots.length % WAREHOUSE_SLOTS === 0),
+  entries: z.partialRecord(entryId, entry.extend({ qualities: z.array(quality).max(QUALITIES.length).optional() })),
+  peaSeedStock: whole.max(TRADE.dailySeeds),
+});
+const gameSchema = gameV11.omit({ jobs: true }).extend({
+  schemaVersion: z.literal(SAVE_VERSION),
+  stations: z.record(z.string(), z.strictObject({ kind: station, tile: point, job: jobSchema.nullable() })),
 });
 
 const saveSchema = z.strictObject({
@@ -140,7 +164,7 @@ const migrations: Partial<Record<number, (save: unknown, world: World) => unknow
     const parsed = saveSchema.extend({ game: previousGame.extend({ schemaVersion: z.literal(4) }) }).safeParse(value);
     if (!parsed.success || parsed.data.game.plots.length !== world.legacyPlots.length) throw new Error('旧存档格式有误。');
     const { game } = parsed.data;
-    const plots: Omit<Plot, 'crop'>[] = world.plots.map(() => ({ tilled: false, planted: null, watered: null }));
+    const plots: Omit<Plot, 'crop' | 'soil'>[] = world.plots.map(() => ({ tilled: false, planted: null, watered: null }));
     const migratedKeys = new Map<string, string>();
     for (const old of world.legacyPlots) {
       const x = old.x / 32, y = old.y / 32;
@@ -203,6 +227,35 @@ const migrations: Partial<Record<number, (save: unknown, world: World) => unknow
     const { mustardTrace, ...game } = parsed.data.game;
     return { ...parsed.data, game: { ...game, schemaVersion: 10, traces: { mustard: mustardTrace, perilla: 'unfound' } } };
   },
+  10(value) {
+    const parsed = saveSchema.extend({ game: gameV10 }).safeParse(value);
+    if (!parsed.success) throw new Error('旧存档格式有误。');
+    const { game } = parsed.data;
+    const entries: Game['entries'] = game.entries;
+    for (const slot of [...game.bag, ...game.warehouse]) {
+      if (slot?.kind !== 'item' || !isCrop(slot.id)) continue;
+      const previous = entries[slot.id];
+      if (previous) previous.qualities = ['normal'];
+    }
+    const plots = game.plots.map(plot => ({ ...plot, soil: {
+      ...newSoil(game.minute), vacantSince: plot.crop === null ? game.minute : null,
+    } }));
+    return { ...parsed.data, game: { ...game, schemaVersion: 11, plots, entries, peaSeedStock: TRADE.dailySeeds } };
+  },
+  11(value) {
+    const parsed = saveSchema.extend({ game: gameV11 }).safeParse(value);
+    if (!parsed.success) throw new Error('旧存档格式有误。');
+    const { jobs, stations, ...game } = parsed.data.game;
+    if (Object.keys(stations).length !== new Set(Object.values(stations).map(stationKey)).size ||
+        Object.keys(jobs).some(kind => !Object.hasOwn(stations, kind))) {
+      throw new Error('旧存档的设施状态有误。');
+    }
+    const placed = Object.fromEntries(station.options.flatMap(kind => {
+      const tile = stations[kind];
+      return tile ? [[stationKey(tile), { kind, tile, job: jobs[kind] ?? null }]] : [];
+    }));
+    return { ...parsed.data, game: { ...game, schemaVersion: SAVE_VERSION, stations: placed } };
+  },
 };
 
 export function validateSave(value: unknown, world: World): Save {
@@ -236,11 +289,13 @@ export function validateSave(value: unknown, world: World): Save {
     return (!tool || tool === 'hoe') && !state.tilled ? TILL_HITS : 0;
   };
   const end = game.day * DAY;
-  const toolIds = [...game.bag, ...game.warehouse].flatMap(slot => slot?.kind === 'tool' ? [slot.id] : []);
-  const positions = [game.position, ...Object.values(game.stations)];
+  const slots = [...game.bag, ...game.warehouse];
+  const toolIds = slots.flatMap(slot => slot?.kind === 'tool' ? [slot.id] : []);
+  const stations = Object.entries(game.stations);
+  const positions = [game.position, ...stations.map(([, { tile }]) => tile)];
   if (game.plots.length !== world.plots.length || game.minute < end - DAY ||
       (game.review ? game.minute !== end : game.minute >= end) || !positions.every(inBounds) ||
-      Object.values(game.stations).some(([, y]) => y >= LIUWAN_ROWS) ||
+      stations.some(([key, { tile }]) => key !== stationKey(tile) || tile[1] >= LIUWAN_ROWS) ||
       game.commissions.radishStockDay > game.day ||
       (!game.submitted && (game.commissions.radishStockDay > 0 || game.commissions.trailFood)) ||
       (game.commissions.trailFood && !game.entries.pakChoi?.lit) ||
@@ -248,21 +303,24 @@ export function validateSave(value: unknown, world: World): Save {
       game.hotbarRow >= game.bag.length / HOTBAR_COLUMNS ||
       (game.equippedSlot !== null && (!game.bag[game.equippedSlot] || Math.floor(game.equippedSlot / HOTBAR_COLUMNS) !== game.hotbarRow)) ||
       toolIds.length !== STARTING_TOOLS.length || new Set(toolIds).size !== STARTING_TOOLS.length ||
+      slots.some(slot => slot?.kind === 'item' && slot.quality !== undefined && !isCrop(slot.id)) ||
       Object.entries(game.depleted).some(([id, day]) => !Object.hasOwn(RESOURCES, id) || day > game.day) ||
       Object.entries(game.strikes).some(([key, hits]) => hits >= hitsFor(key) || game.depleted[key]) ||
       (game.action && (!hitsFor(game.action.key, game.action.tool) || game.action.at <= game.minute || game.action.tool !== equippedTool(game))) ||
       game.plots.some(plot => (plot.crop === null) !== (plot.planted === null) ||
         (plot.planted !== null && (!plot.tilled || plot.planted > game.minute)) ||
-        (plot.watered !== null && (plot.planted === null || plot.watered < plot.planted || plot.watered > game.minute))) ||
-      Object.entries(game.jobs).some(([id, job]) =>
-        !game.stations[id as keyof Game['stations']] || RECIPES[job.recipe].station !== id ||
+        (plot.watered !== null && (plot.planted === null || plot.watered < plot.planted || plot.watered > game.minute)) ||
+        (plot.crop === null) !== (plot.soil.vacantSince !== null) ||
+        (plot.soil.vacantSince ?? 0) > game.minute || (plot.soil.lastCrop === null && plot.soil.streak > 0)) ||
+      stations.some(([, { kind, job }]) => job && (
+        RECIPES[job.recipe].station !== kind ||
         job.started > game.minute || Math.abs(job.at - job.started - RECIPES[job.recipe].duration) > 1e-6 ||
-        job.ready !== (job.at <= game.minute))) {
+        job.ready !== (job.at <= game.minute)))) {
     throw new Error('存档内的时间、位置或物品状态有误。');
   }
 
   // Older saves can still show that a product was made, even if it was sold or used.
-  const jobs = Object.values(game.jobs);
+  const jobs = stations.flatMap(([, { job }]) => job ? [job] : []);
   const hasProduct = (id: 'salt' | 'fishSoup') => count(game, id) || count(game, id, 'warehouse') ||
     jobs.some(job => job.ready && RECIPES[job.recipe].output === id);
   if (hasProduct('fishSoup') || game.entries.crucian?.lit) {

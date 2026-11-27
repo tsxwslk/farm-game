@@ -27,7 +27,7 @@
     let lastHud = '';
     let hovered = null;
     let placement = null;
-    const stationNames = {kiln: '盐灶', jar: '腌菜缸'};
+    const stationNames = {kiln: '火灶', jar: '腌菜缸'};
     const menu = node('game-menu');
     const review = node('game-review');
     const siteList = node('map-sites');

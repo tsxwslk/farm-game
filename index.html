@@ -44,7 +44,7 @@
 
     <div class="left-dock">
       <div class="dock" role="group" aria-label="随身菜单">
-        <button type="button" id="game-bag">背包 <kbd>B</kbd></button>
+        <button type="button" id="game-bag" aria-keyshortcuts="E">背包 <kbd>E</kbd></button>
         <button type="button" id="game-ledger">物志 <kbd>J</kbd></button>
         <button type="button" id="game-map">地图 <kbd>M</kbd></button>
         <button type="button" id="game-saves">存档</button>
@@ -63,6 +63,7 @@
         <button type="button" id="directions" class="square" aria-label="方向键" aria-expanded="false">✥</button>
       </div>
       <div class="dock" role="group" aria-label="场景操作">
+        <button id="game-soil" type="button" aria-keyshortcuts="Q" hidden>查看土壤 <kbd>Q</kbd></button>
         <button id="game-action" type="button">操作 <kbd>F</kbd></button>
       </div>
       <button type="button" id="game-speed" class="fast-forward" aria-label="快进 1 游戏小时" hidden>»</button>

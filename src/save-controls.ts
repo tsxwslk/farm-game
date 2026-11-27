@@ -1,8 +1,8 @@
-import { type Game, formatClock, newGame } from './game';
+import { type Game, formatClock, newGame, stationKey } from './game';
 import { button, element, node } from './panels';
 import { openSaves, snapshot, validateSave, type Save } from './saves';
 import type { Scene } from './scene';
-import type { Point, Station } from './content';
+import type { Point } from './content';
 
 function newId() {
   const bytes = crypto.getRandomValues(new Uint8Array(16));
@@ -41,11 +41,13 @@ export function createSaveControls(scene: Scene, body: HTMLElement, current: () 
       game.position = landing;
       game.action = null;
     }
-    for (const [kind, point] of Object.entries(game.stations) as [Station, Point][]) {
-      if (canPlace(game, kind, point)) continue;
-      const space = nearest(point, tile => canPlace(game, kind, tile));
+    for (const [id, station] of Object.entries(game.stations)) {
+      const { kind, tile } = station;
+      if (canPlace(game, kind, tile, id)) continue;
+      const space = nearest(tile, point => canPlace(game, kind, point, id));
       if (!space) throw new Error('地图上没有可恢复的设施位置。');
-      game.stations[kind] = space;
+      delete game.stations[id];
+      game.stations[stationKey(space)] = { ...station, tile: space };
       setStations(game);
     }
   }
@@ -56,8 +58,8 @@ export function createSaveControls(scene: Scene, body: HTMLElement, current: () 
     try {
       setStations(save.game);
       if (typeof version === 'number' && version < 5) relocateForNewMap(save.game);
-      for (const [kind, point] of Object.entries(save.game.stations) as [Station, Point][]) {
-        if (!canPlace(save.game, kind, point)) throw new Error('存档里的设施位置不可用。');
+      for (const [id, { kind, tile }] of Object.entries(save.game.stations)) {
+        if (!canPlace(save.game, kind, tile, id)) throw new Error('存档里的设施位置不可用。');
       }
       if (!passable(world, blocked, ...save.game.position)) throw new Error('存档里的角色位置不可用。');
     } finally {

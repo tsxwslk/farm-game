@@ -1,5 +1,5 @@
 import { assetUrl } from './assets';
-import { CROPS, CROP_IDS, HOTBAR_COLUMNS, MAX_BAG_SLOTS, WATER_CAPACITY, type Item, type Tool } from './content';
+import { CROPS, CROP_IDS, HOTBAR_COLUMNS, MAX_BAG_SLOTS, QUALITY_LABELS, WATER_CAPACITY, isCrop, type Item, type Tool } from './content';
 import type { Game } from './game';
 import { equippedStack, stackCount, stackName, type SlotAddress, type Stack, type Storage } from './inventory';
 type Pixel = [color: string, x: number, y: number, width: number, height: number];
@@ -8,13 +8,17 @@ const wood = '#8e5c3c';
 const lightWood = '#d1a26b';
 const shadow = '#465650';
 const iconFiles: Partial<Record<Tool | Item, string>> = {
+  saltedPeas: 'assets/peas/salted-peas-32x32.png',
+  plantScraps: 'assets/compost/plant-scraps-32x32.png',
+  compost: 'assets/compost/compost-32x32.png',
+  compostShed: 'assets/compost/compost-shed-48x48.png',
   hoe: 'assets/tools/hoe-16x16.png',
   pick: 'assets/tools/pick-16x16.png',
   can: 'assets/tools/can-16x16.png',
   axe: 'assets/tools/axe-16x16.png',
   rod: 'assets/tools/rod-16x16.png',
   crock: 'assets/jar/jar-crock-48x48.png',
-  kiln: 'assets/kiln/salt-stove-inventory-16x16.png',
+  kiln: 'assets/fire-stove/fire-stove-inventory-16x16.png',
   crucian: 'assets/fish/crucian-32x32.png',
   fishSoup: 'assets/fish/crucian-soup-32x32.png',
   perillaSoup: 'assets/fish/perilla-crucian-soup-32x32.png',
@@ -78,7 +82,8 @@ export function stackIcon(stack: Stack) {
 
 export function describeSlot(game: Game, stack: Stack) {
   if (stack.id === 'can') return stackName(stack) + ' ' + game.water + '/' + WATER_CAPACITY;
-  return stackName(stack) + (stack.kind === 'item' ? ' ×' + stackCount(stack) : '');
+  return stackName(stack) + (stack.kind === 'item' ? ' ×' + stackCount(stack) +
+    (isCrop(stack.id) ? ' · ' + QUALITY_LABELS[stack.quality ?? 'normal'] : '') : '');
 }
 
 function slotButton(address: SlotAddress, select: (address: SlotAddress) => void, shortcut: boolean) {
@@ -97,7 +102,10 @@ function slotButton(address: SlotAddress, select: (address: SlotAddress) => void
   const quantity = document.createElement('span');
   quantity.className = 'slot-quantity';
   quantity.setAttribute('aria-hidden', 'true');
-  control.append(key, picture, quantity);
+  const grade = document.createElement('span');
+  grade.className = 'slot-quality';
+  grade.setAttribute('aria-hidden', 'true');
+  control.append(key, picture, quantity, grade);
   control.addEventListener('click', () => select(address));
   let previous: Tool | Item | null = null;
   return { control, update(game: Game, selection: SlotAddress | null, draggable: boolean) {
@@ -112,6 +120,8 @@ function slotButton(address: SlotAddress, select: (address: SlotAddress) => void
     control.setAttribute('aria-pressed', String(selection?.storage === storage && selection.index === index));
     control.classList.toggle('slot-equipped', storage === 'bag' && game.equippedSlot === index);
     control.draggable = draggable && Boolean(stack);
+    const quality = stack?.kind === 'item' ? stack.quality : undefined;
+    grade.textContent = quality && quality !== 'normal' ? QUALITY_LABELS[quality].slice(0, 1) : '';
     quantity.textContent = stack?.kind === 'item' ? String(stackCount(stack)) : id === 'can' ? String(game.water) : '';
   } };
 }
@@ -144,7 +154,7 @@ export function createHotbar(select: (index: number) => void) {
     const totalRows = game.bag.length / HOTBAR_COLUMNS;
     const visible = game.bag.slice(activeRow * HOTBAR_COLUMNS, (activeRow + 1) * HOTBAR_COLUMNS);
     const signature = [activeRow, totalRows, index, game.water, ...visible.map(stack => stack &&
-      (stack.kind === 'item' ? stack.id + ':' + stackCount(stack) : stack.id))].join('/');
+      (stack.kind === 'item' ? stack.id + ':' + stackCount(stack) + ':' + (stack.quality ?? '') : stack.id))].join('/');
     if (signature === previous) return;
     previous = signature;
     rows.forEach(({ row, update }, i) => {

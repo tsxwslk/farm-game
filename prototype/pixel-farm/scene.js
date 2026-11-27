@@ -51,13 +51,14 @@ window.startLiuwanScene = function ({layout, jobMeter, cropStage, cropArt, weath
     cottage: D.cottage,
     crate: {...D.crate, contact: 28},
     seedBox: {...D.crate, contact: 28},
-    kiln: {file: 'assets/kiln/salt-stove-scene-48x48.png', anchor: [24, 44], contact: 25},
+    kiln: {file: 'assets/fire-stove/fire-stove-scene-48x48.png', anchor: [24, 44], contact: 25},
     jar: {...D.jar, contact: 16},
     willow: {file: 'assets/willow/willow-repaint.png', anchor: [48, 122], contact: 16},
     salt: {file: 'assets/rock/rock-ore-salt.png', anchor: [24, 44], contact: 28},
     stone: {file: 'assets/rock/rock-atlas.png', anchor: [24, 44], frameSize: 48, frames: 3, contact: 26},
   };
   if (layout) {
+    sprites.compostShed = {file: 'assets/compost/compost-shed-48x48.png', anchor: [24, 44], contact: 27};
     sprites.oak = {file: 'assets/oak/oak-96x128.png', anchor: [48, 122], contact: 30};
     sprites.ruin = {file: 'assets/salt-ruins/salt-ruins-64x64.png', anchor: [32, 58], contact: 30};
     const stump = 'assets/stump/stump-48x48.png';
@@ -436,10 +437,9 @@ window.startLiuwanScene = function ({layout, jobMeter, cropStage, cropArt, weath
     scene.globalAlpha = 1;
   }
 
-  function drawStationStatus(actor, game, phase) {
-    const job = game.jobs[actor.kind];
+  function drawStationStatus(actor, job, minute, phase) {
     const {x, y} = actor;
-    const {remaining, elapsed, duration} = jobMeter(job, game.minute);
+    const {remaining, elapsed, duration} = jobMeter(job, minute);
     if (actor.kind === 'kiln' && !job.ready && !reducedMotion.matches) {
       scene.fillStyle = phase % 5 < 3 ? '#ffb567' : '#d98145';
       scene.fillRect(x - 7, y - 8, 7, 3);
@@ -451,8 +451,8 @@ window.startLiuwanScene = function ({layout, jobMeter, cropStage, cropArt, weath
       }
       scene.globalAlpha = 1;
     }
-    const text = job.ready ? '可领取' : '剩 ' + remaining + ' 分';
-    const width = 62;
+    const text = job.ready ? '可领' : remaining + '分';
+    const width = TILE - 2;
     const top = y + 9;
     scene.fillStyle = '#302d23ef';
     scene.fillRect(x - width / 2, top, width, 19);
@@ -460,10 +460,11 @@ window.startLiuwanScene = function ({layout, jobMeter, cropStage, cropArt, weath
     scene.textAlign = 'center';
     scene.font = 'bold 11px system-ui, sans-serif';
     scene.fillText(text, x, top + 11);
+    const barWidth = width - 6;
     scene.fillStyle = '#645640';
-    scene.fillRect(x - 27, top + 14, 54, 3);
+    scene.fillRect(x - barWidth / 2, top + 14, barWidth, 3);
     scene.fillStyle = '#e6bd6d';
-    scene.fillRect(x - 27, top + 14, Math.round(54 * elapsed / duration), 3);
+    scene.fillRect(x - barWidth / 2, top + 14, Math.round(barWidth * elapsed / duration), 3);
   }
 
   function drawPackingRing(actor, progress) {
@@ -582,10 +583,10 @@ window.startLiuwanScene = function ({layout, jobMeter, cropStage, cropArt, weath
       drawFishing(person, motion, phase);
     }
     for (const actor of visible) {
-      const job = game.jobs[actor.kind];
+      const job = layout ? game.stations[actor.id]?.job : game.jobs[actor.kind];
       if (!job) continue;
       if (layout) {
-        drawStationStatus(actor, game, phase);
+        drawStationStatus(actor, job, game.minute, phase);
         continue;
       }
       const progress = 1 - (job.at - game.minute) / G.RECIPES[actor.kind].duration;
@@ -624,7 +625,7 @@ window.startLiuwanScene = function ({layout, jobMeter, cropStage, cropArt, weath
       scene.globalAlpha = 1;
     }
     if (layout && motion.packing) {
-      const actor = visible.find(candidate => candidate.kind === motion.packing.kind);
+      const actor = visible.find(candidate => candidate.id === motion.packing.stationId);
       if (actor) drawPackingRing(actor, motion.packing.progress);
     }
   }
@@ -654,12 +655,13 @@ window.startLiuwanScene = function ({layout, jobMeter, cropStage, cropArt, weath
     const phase = layout && !reducedMotion.matches ? Math.floor(game.minute * 12) : 0;
     const hitFrame = motion?.hit ? Math.floor((game.minute - motion.hit.minute) * 20) : 0;
     const swingFrame = layout && game.action ? Math.floor((game.action.at - game.minute) * 22) : 0;
+    const jobs = layout ? Object.entries(game.stations).map(([id, {job}]) => [id, job]) : Object.entries(game.jobs);
     const signature = JSON.stringify([position, hovered?.kind, hovered?.id, game.stations, placement, game.submitted, visibleTraces.map(target => target.id),
       layout ? [game.strikes, game.depleted, Boolean(game.entries.rockSalt), game.action?.key, swingFrame,
         phase, game.day, Math.floor(game.minute), reducedMotion.matches, motion.facing, motion.hit, hitFrame,
         motion.fishing, motion.ripples, motion.packing] : game.minute >= game.mineReady,
-      game.plots.map(plot => plot.crop ? plot.crop + '-' + stageFor(game, plot) : stageFor(game, plot)), Object.entries(game.jobs).map(([station, job]) =>
-        [station, Math.ceil(job.at - game.minute), job.ready, layout ? Math.floor((game.minute - job.started) * 12) : null])]);
+      game.plots.map(plot => plot.crop ? plot.crop + '-' + stageFor(game, plot) : stageFor(game, plot)), jobs.flatMap(([id, job]) =>
+        job ? [[id, Math.ceil(job.at - game.minute), job.ready, layout ? Math.floor((game.minute - job.started) * 12) : null]] : [])]);
     if (signature === previousFrame && viewport === previousView) return;
     previousFrame = signature;
     previousView = viewport;
@@ -691,10 +693,6 @@ window.startLiuwanScene = function ({layout, jobMeter, cropStage, cropArt, weath
     points: layout ? archiveApproaches : archiveDoor,
     footprint: archiveFootprint,
   };
-  const stations = [
-    {kind: 'kiln', actor: 'kiln', label: '盐灶', points: []},
-    {kind: 'jar', actor: 'jar', label: '腌菜缸', points: []},
-  ];
   const plotTargets = world.plots.map(plot => {
     const x = plot.x / TILE, y = plot.y / TILE;
     if (layout) return {kind: 'plot', id: plot.id, tile: [x, y], points: [[x, y], ...adjacent([x, y])]};
@@ -721,7 +719,7 @@ window.startLiuwanScene = function ({layout, jobMeter, cropStage, cropArt, weath
   }
   const fishingSpots = [...fishingByTile.values()];
   const targets = layout ? [
-    archive, ...stations,
+    archive,
     {kind: 'chest', actor: 'crate', label: '仓库', tile: chestTile, points: adjacent(chestTile)},
     {kind: 'ruin', actor: 'ruin', label: '旧制盐台', tile: layout.saltRuin, points: adjacent(layout.saltRuin)},
     river,
@@ -754,6 +752,7 @@ window.startLiuwanScene = function ({layout, jobMeter, cropStage, cropArt, weath
       targets.push({kind, id: kind, label, tile, points: kind === 'waystone' ? adjacent(tile) : [tile, ...adjacent(tile)]});
     }
   }
+  const fixedTargetCount = targets.length;
   const blocked = new Set();
   const scenery = new Set();
   const restoredScenery = new Set();
@@ -780,20 +779,29 @@ window.startLiuwanScene = function ({layout, jobMeter, cropStage, cropArt, weath
     return kind === 'willow' || kind === 'oak';
   }
 
-  function obstacles(stations, game) {
+  function obstacles(stationTiles, game) {
     const resources = layout ? fixedActors.filter(actor => actor.resource && actor.kind !== 'clay' && !game.depleted[actor.id])
       .map(actor => index(actor.resource.tile)) : [];
-    return [...scenery, ...(game.submitted ? restoredScenery : []), ...resources, ...Object.values(stations).map(index)];
+    return [...scenery, ...(game.submitted ? restoredScenery : []), ...resources, ...stationTiles.map(index)];
   }
 
   function setStations(game) {
     plotStates = game.plots;
+    const placed = layout ? Object.entries(game.stations).map(([id, {kind, tile}]) => ({id, kind, tile})) :
+      Object.entries(game.stations).map(([kind, tile]) => ({id: kind, kind, tile}));
     actors = [
       ...fixedActors.filter(actor => !actor.resource || actor.kind === 'clay' || !game.depleted[actor.id]),
-      ...Object.entries(game.stations).map(([kind, [x, y]]) => at(kind, x + .5, y + .6)),
+      ...placed.map(({id, kind, tile: [x, y]}) => at(kind, x + .5, y + .6, {id})),
     ];
     blocked.clear();
-    for (const cell of obstacles(game.stations, game)) blocked.add(cell);
+    for (const cell of obstacles(placed.map(({tile}) => tile), game)) blocked.add(cell);
+    if (layout) {
+      targets.length = fixedTargetCount;
+      for (const {id, kind, tile} of placed) {
+        targets.push({id, kind, actor: kind, label: layout.stations[kind], tile, points: adjacent(tile)});
+      }
+      return;
+    }
     for (const target of targets) {
       if (target.kind !== 'kiln' && target.kind !== 'jar') continue;
       target.tile = game.stations[target.kind];
@@ -801,29 +809,35 @@ window.startLiuwanScene = function ({layout, jobMeter, cropStage, cropArt, weath
     }
   }
 
-  function canPlace(game, kind, tile) {
+  function canPlace(game, kind, tile, stationId) {
     if (regionAt(tile) !== liuwan) return false;
     if (!G.passable(world, scenery, ...tile) || restoredScenery.has(index(tile))) return false;
     if (index(tile) === index(game.position)) return false;
     if (layout) {
       if (index(tile) === index(chestPassage)) return false;
-      if (southPass && index(tile) === index(southPass.gate) && index(tile) !== index(game.stations[kind] ?? [-1, -1])) return false;
+      if (southPass && index(tile) === index(southPass.gate) &&
+        (!stationId || index(tile) !== index(game.stations[stationId].tile))) return false;
       const plot = E.plotAt(world, tile[0] * TILE, tile[1] * TILE);
       if (plot && game.plots[plot.id].tilled) return false;
       if (fixedActors.some(actor => actor.resource &&
         (actor.resource.renews || !game.depleted[actor.id]) && index(actor.resource.tile) === index(tile))) return false;
       if (archiveDoor.some(point => index(point) === index(tile))) return false;
     } else if (E.family(world.cells[index(tile)]) === 'tilled') return false;
-    if (Object.entries(game.stations).some(([id, point]) => id !== kind && index(tile) === index(point))) return false;
-
-    const stations = {...game.stations, [kind]: tile};
-    const occupied = new Set(obstacles(stations, game));
+    // The early demo moves its existing facility. The main game places a new one.
+    const stations = layout ? null : {...game.stations, [kind]: tile};
+    const existing = layout ? Object.entries(game.stations).filter(([id]) => id !== stationId).map(([, {tile}]) => tile) :
+      Object.entries(game.stations).filter(([id]) => id !== kind).map(([, point]) => point);
+    if (existing.some(point => index(tile) === index(point))) return false;
+    const occupied = new Set(obstacles([...existing, tile], game));
     const origin = regionAt(game.position) === liuwan ? game.position : archiveDoor[0];
-    return targets.filter(target => target.kind !== 'plot' && target.kind !== 'return' && target.kind !== 'waystone' && target.kind !== 'trace' &&
+    return (!layout || G.routeTo(world, occupied, origin, adjacent(tile)) !== null) &&
+      targets.filter(target => target.kind !== 'plot' && target.kind !== 'return' && target.kind !== 'waystone' && target.kind !== 'trace' &&
       (!target.tile || regionAt(target.tile) === liuwan) &&
+      (!stationId || target.id !== stationId) &&
       (!layout || target.kind !== 'resource' || !game.depleted[target.id]) &&
-      (!layout || target.points.length || stations[target.kind])).every(target => {
-      const points = stations[target.kind] ? adjacent(stations[target.kind]) : target.points;
+      (!layout || target.points.length)).every(target => {
+      const point = stations?.[target.kind];
+      const points = point ? adjacent(point) : target.points;
       return G.routeTo(world, occupied, origin, points) !== null;
     });
   }
@@ -894,7 +908,7 @@ window.startLiuwanScene = function ({layout, jobMeter, cropStage, cropArt, weath
         continue;
       }
       const actor = actors.find(item => item.kind === target.actor && !item.forgotten &&
-        (target.kind !== 'resource' || item.id === target.id));
+        (target.kind !== 'resource' && !layout?.stations[target.kind] || item.id === target.id));
       if (!actor) continue;
       const sprite = sprites[actor.kind];
       const image = images[actor.kind];

@@ -1,4 +1,5 @@
-import { CROPS, CROP_IDS, HOTBAR_COLUMNS, ITEMS, RECIPES, SOUTH_PASS, STATIONS, STATION_ITEMS, TOOLS, type EntryId, type Point, type Station } from './content';
+import { CROPS, CROP_IDS, HOTBAR_COLUMNS, ITEMS, QUALITY_LABELS, RECIPES, SOUTH_PASS, STATIONS, STATION_ITEMS, TOOLS, isStation,
+  type EntryId, type Point, type Station } from './content';
 import {
   advance, canBuild, canTravel, catchFish, formatClock, growthStatus, jobMeter, newGame, nextDay, operate, packStation, place,
   renewResources, targetAction, targetKey, targetProgress, traceVisible,
@@ -9,9 +10,10 @@ import {
   castOutcome, MAX_CAST_TIME, REEL_HITS, REEL_MISSES, REEL_TIME, REEL_ZONES, reelPosition, RIPPLE_INTERVAL, rippleSpots, sameTile,
 } from './fishing';
 import { equipSlot, equippedStack, equippedTool, moveStack, type SlotAddress } from './inventory';
-import { bindHotbarItemCard, TradingBook, element, forecastPanel, inventoryPanel, ledgerPanel, mapPanel, node, stationPanel } from './panels';
+import { bindHotbarItemCard, TradingBook, element, forecastPanel, inventoryPanel, ledgerPanel, mapPanel, node, soilPanel, stationPanel } from './panels';
 import { createSaveControls } from './save-controls';
 import type { Motion, Placement, Scene, Target } from './scene';
+import { compostGain, cropStreak, harvestQuality } from './soil';
 import { liuwanWeather, WEATHER_LABELS } from './weather';
 
 const TILE = 32;
@@ -22,7 +24,7 @@ const SLOT_WHEEL_PAUSE_MS = 95;
 const SLOT_WHEEL_NOTCH_MS = 28;
 const VISIBLE_CLOCK_KEY = 'wu-zhi-visible-clock';
 const MOVES: Record<string, Point> = { w: [0, -1], a: [-1, 0], s: [0, 1], d: [1, 0] };
-type Panel = 'bag' | 'warehouse' | 'ledger' | 'map' | 'saves' | 'archive' | 'forecast' | 'clock' | Station;
+type Panel = 'bag' | 'warehouse' | 'ledger' | 'map' | 'saves' | 'archive' | 'forecast' | 'clock' | 'soil' | { stationId: string };
 
 function useVisibleClock() {
   try {
@@ -48,6 +50,7 @@ export async function createControls(scene: Scene) {
   const message = node('depth-status');
   const sheetMessage = node('sheet-status');
   const actionButton = node<HTMLButtonElement>('game-action');
+  const soilButton = node<HTMLButtonElement>('game-soil');
   const nextButton = node<HTMLButtonElement>('next-day');
   const fishingGame = node('fishing-game');
   const fishingScore = node('fishing-score');
@@ -73,9 +76,11 @@ export async function createControls(scene: Scene) {
   let fishing: { tile: Point; at: number; bites: boolean; reel: { started: number; hits: number; misses: number; last: number } | null } | null = null;
   let ripples: Point[] = [];
   let rippleInterval = -1;
-  let hold: { kind: Station; pointerId: number; x: number; y: number; started: number; timer: number } | null = null;
+  let hold: { stationId: string; pointerId: number; x: number; y: number; started: number; timer: number } | null = null;
   let packedByHold = false;
   let panel: Panel | null = null;
+  let inspectedPlot = 0;
+  let pointedPlot: Target | null = null;
   let selectedStack: SlotAddress | null = null;
   let warehousePage = 0;
   let selectedEntry: EntryId = 'radish';
@@ -101,6 +106,7 @@ export async function createControls(scene: Scene) {
 
   function restore(saved: Game) {
     game = saved;
+    pointedPlot = null;
     warehousePage = 0;
     stopMovement();
     selected = hovered = placement = null;
@@ -134,11 +140,31 @@ export async function createControls(scene: Scene) {
     return target.points.some(([x, y]) => x === game.position[0] && y === game.position[1]);
   }
 
+  function soilTarget() {
+    const canInspect = (target: Target | null | undefined): target is Target =>
+      target?.kind === 'plot' && game.plots[Number(target.id)].tilled && clearPlot(target) && isNear(target);
+    if (canInspect(pointedPlot)) return pointedPlot;
+    if (canInspect(selected)) return selected;
+    const [x, y] = game.position;
+    const ahead: Point = [x + facing[0], y + facing[1]];
+    for (const tile of [ahead, game.position]) {
+      const plot = plotAtTile(tile);
+      if (canInspect(plot)) return plot;
+    }
+  }
+
+  function inspectSoil(target = soilTarget()) {
+    if (!target || placement || fishing || game.review || saves.busy) return;
+    inspectedPlot = Number(target.id);
+    openPanel('soil');
+  }
+
   function activeTarget() {
     const tool = equippedTool(game);
     const matchesTool = (target: Target) => target.kind === 'fishing' ? tool === 'rod' :
       (target.kind !== 'water' || tool !== 'rod') && (target.kind !== 'trail' || game.submitted) &&
       (target.kind !== 'trace' || target.trace === 'perilla' || Boolean(target.trace && traceVisible(game, target.trace)));
+    if (hovered?.kind === 'plot' && isNear(hovered) && !tool && equippedStack(game)) return hovered;
     if (selected && isNear(selected) && matchesTool(selected)) return selected;
     if (hovered && isNear(hovered) && matchesTool(hovered)) return hovered;
     if (tool === 'rod') {
@@ -149,7 +175,7 @@ export async function createControls(scene: Scene) {
     const nearby = targets.filter(target => isNear(target) && matchesTool(target) &&
       (target.kind !== 'resource' || !game.depleted[targetKey(target)]));
     const facilities = nearby.filter(target =>
-      target.kind === 'archive' || target.kind === 'chest' || target.kind === 'kiln' || target.kind === 'jar' ||
+      target.kind === 'archive' || target.kind === 'chest' || isStation(target.kind) ||
       target.kind === 'trail' || target.kind === 'return' || target.kind === 'waystone' || target.kind === 'trace');
     const [x, y] = game.position;
     const ahead: Point = [x + facing[0], y + facing[1]];
@@ -297,8 +323,12 @@ export async function createControls(scene: Scene) {
       void saves.save();
       return;
     }
-    if (target.kind === 'archive' || target.kind === 'kiln' || target.kind === 'jar') {
-      openPanel(target.kind);
+    if (target.kind === 'archive') {
+      openPanel('archive');
+      return;
+    }
+    if (isStation(target.kind) && typeof target.id === 'string') {
+      openPanel({ stationId: target.id });
       return;
     }
     if (target.kind === 'ruin') {
@@ -326,6 +356,13 @@ export async function createControls(scene: Scene) {
       report(target.kind === 'trail' ? '到了南山道。循小径可见路碑。' : '回到了柳湾。');
       void saves.save();
       return;
+    }
+    if (target.kind === 'plot') {
+      const action = targetAction(game, target).label;
+      if (action === '查看土壤' || action === '查看长势') {
+        inspectSoil(target);
+        return;
+      }
     }
     const firstWater = target.kind === 'plot' && game.plots.every(plot => plot.watered === null) &&
       !game.entries.radish && !game.entries.rockSalt;
@@ -462,11 +499,20 @@ export async function createControls(scene: Scene) {
     const suffix = (progress ? ' ' + progress.done + '/' + progress.total : '') +
       (target && isNear(target) ? ' · 点击 / F' : '');
     const growth = target?.kind === 'plot' && action?.label === '查看长势' ? growthStatus(game, game.plots[Number(target.id)]) : '';
+    const soil = target?.kind === 'plot' ? game.plots[Number(target.id)].soil : null;
+    let fieldHint = '';
+    if (soil && seed) {
+      fieldHint = ' · ' + (cropStreak(soil, seed) >= 2 ? '同科连作 · ' : '') + '预计' + QUALITY_LABELS[harvestQuality(soil, seed)];
+    } else if (soil && action?.label === '施堆肥') {
+      const gain = compostGain(soil);
+      fieldHint = ' · 主养分 +' + gain.nutrients + ' · 菌群 +' + gain.microbes;
+    }
     const fishingHint = fishing?.reel ? '' : fishing ? '等候咬钩 · F 收竿' :
       target?.kind === 'fishing' && target.tile && isRipple(target.tile) ? '涟漪钓点 · 更容易咬钩' + suffix : '';
     const placementHint = coarsePointer.matches ? '点空地预览，再点一次摆放' : '点击空地确认，Esc 取消';
+    soilButton.hidden = Boolean(placement || fishing || game.review || !soilTarget());
     showText(node('target-hint'), placement ? placementHint :
-      fishing?.reel ? '' : fishingHint || growth || (action ? name + action.label + suffix : ''));
+      fishing?.reel ? '' : fishingHint || growth || (action ? name + action.label + fieldHint + suffix : ''));
     if (!message.hidden && now > messageExpires) message.hidden = true;
     renderHotbar(game);
     hotbarCard.update();
@@ -501,8 +547,8 @@ export async function createControls(scene: Scene) {
   }
 
   function updateJobPanel() {
-    if (panel !== 'kiln' && panel !== 'jar') return;
-    const job = game.jobs[panel];
+    if (!panel || typeof panel === 'string') return;
+    const job = game.stations[panel.stationId]?.job;
     const meter = body.querySelector<HTMLProgressElement>('#job-progress');
     const label = body.querySelector<HTMLElement>('#job-remaining');
     if (!job || job.ready || !meter || !label) return;
@@ -539,7 +585,7 @@ export async function createControls(scene: Scene) {
       step: step?.progress ?? null, facing, progress: target ? targetProgress(game, target) : null, hit,
       fishing: fishing && { tile: fishing.tile, hooked: Boolean(fishing.reel) },
       ripples,
-      packing: hold && { kind: hold.kind, progress: Math.min(1, Math.max(0, (now - hold.started) / PACK_HOLD_MS)) },
+      packing: hold && { stationId: hold.stationId, progress: Math.min(1, Math.max(0, (now - hold.started) / PACK_HOLD_MS)) },
     });
     updateJobPanel();
     updateHud(now, focused);
@@ -607,13 +653,22 @@ export async function createControls(scene: Scene) {
     if (!panel) return;
     const mapTitle = game.position[1] >= SOUTH_PASS.bounds.y ? SOUTH_PASS.name + '地图' : '柳湾地图';
     const titles = { bag: '背包', warehouse: '仓库', ledger: '物志', map: mapTitle, saves: '存档',
-      archive: '田记所账面', forecast: '柳湾天气预报', clock: '计时设置', ...STATIONS };
-    node('sheet-title').textContent = titles[panel];
+      archive: '田记所账面', forecast: '柳湾天气预报', clock: '计时设置', soil: '田块土壤' };
     const update = (text: string) => {
       renderPanel();
       report(text, sheetMessage);
       void saves.save();
     };
+    if (typeof panel === 'object') {
+      const { stationId } = panel;
+      const station = game.stations[stationId];
+      if (!station) return closePanel();
+      node('sheet-title').textContent = STATIONS[station.kind];
+      body.replaceChildren(...stationPanel(game, stationId, update, () => storeFacility(stationId)));
+      updateJobPanel();
+      return;
+    }
+    node('sheet-title').textContent = titles[panel];
     if (panel === 'archive') {
       tradingBook.render(body, game, text => {
         report(text, sheetMessage);
@@ -636,6 +691,8 @@ export async function createControls(scene: Scene) {
       body.replaceChildren(...mapPanel(world, game, ripples));
     } else if (panel === 'forecast') {
       body.replaceChildren(...forecastPanel(game));
+    } else if (panel === 'soil') {
+      body.replaceChildren(...soilPanel(game, game.plots[inspectedPlot]));
     } else if (panel === 'clock') {
       const option = element('label', undefined, 'clock-option');
       const checkbox = element('input');
@@ -666,12 +723,8 @@ export async function createControls(scene: Scene) {
       sheet.scrollTop = scroll;
     } else if (panel === 'saves') {
       void saves.render();
-    } else {
-      const station = panel;
-      body.replaceChildren(...stationPanel(game, station, update, () => storeFacility(station)));
     }
     tickPanel();
-    updateJobPanel();
   }
 
   function focusStack({ storage, index }: SlotAddress) {
@@ -690,9 +743,9 @@ export async function createControls(scene: Scene) {
     void saves.save();
   }
 
-  function storeFacility(kind: Station) {
+  function storeFacility(stationId: string) {
     if (saves.busy) return;
-    const result = packStation(game, kind);
+    const result = packStation(game, stationId);
     if (!result.ok) {
       report(result.message, sheet.open ? sheetMessage : message);
       return;
@@ -707,7 +760,7 @@ export async function createControls(scene: Scene) {
   }
 
   function beginPlacement(kind: Station, slot?: number) {
-    if (game.stations[kind] || (slot === undefined && !canBuild(game, kind))) return;
+    if (slot === undefined && !canBuild(game, kind)) return;
     stopMovement();
     placement = { kind, slot, tile: null, allowed: false };
     selected = hovered = null;
@@ -730,8 +783,7 @@ export async function createControls(scene: Scene) {
     const stack = equippedStack(game);
     const kind = (Object.keys(STATION_ITEMS) as Station[]).find(station => STATION_ITEMS[station] === stack?.id);
     if (!kind || game.equippedSlot === null) return;
-    if (game.stations[kind]) report('场上已有' + STATIONS[kind] + '。');
-    else beginPlacement(kind, game.equippedSlot);
+    beginPlacement(kind, game.equippedSlot);
   }
 
   function cycleRow() {
@@ -774,16 +826,16 @@ export async function createControls(scene: Scene) {
     if (placement || panel || fishing?.reel || game.review || saves.busy) return;
     const point = worldPoint(event);
     const target = point && pick(...point, equippedTool(game));
-    if (!target || (target.kind !== 'kiln' && target.kind !== 'jar') || !isNear(target)) return;
-    const kind = target.kind;
+    if (!target || !isStation(target.kind) || typeof target.id !== 'string' || !isNear(target)) return;
+    const stationId = target.id;
     const started = performance.now();
     const timer = window.setTimeout(() => {
       hold = null;
       if (placement || panel || game.review || !isNear(target)) return;
       packedByHold = true;
-      storeFacility(kind);
+      storeFacility(stationId);
     }, PACK_HOLD_MS);
-    hold = { kind, pointerId: event.pointerId, x: event.clientX, y: event.clientY, started, timer };
+    hold = { stationId, pointerId: event.pointerId, x: event.clientX, y: event.clientY, started, timer };
   });
   for (const name of ['pointerup', 'pointercancel', 'pointerleave', 'lostpointercapture'] as const) {
     canvas.addEventListener(name, event => {
@@ -803,9 +855,19 @@ export async function createControls(scene: Scene) {
       if (tile?.join() === placement.tile?.join()) return;
       placement.tile = tile;
       placement.allowed = Boolean(tile && canPlace(game, placement.kind, tile));
-    } else hovered = point ? pick(...point, equippedTool(game)) ?? null : null;
+    } else {
+      hovered = point ? pick(...point, equippedTool(game)) ?? null : null;
+      pointedPlot = point ? plotAtTile(tileAt(point)) : null;
+    }
   });
   canvas.addEventListener('pointerleave', () => { hovered = null; });
+
+  function plotAtTile([col, row]: Point) {
+    if (col < 0 || col >= world.cols || row < 0 || row >= world.rows) return null;
+    const id = world.plotIds[row * world.cols + col];
+    return plotTargets[id] ?? null;
+  }
+
   canvas.addEventListener('click', event => {
     if (packedByHold) {
       packedByHold = false;
@@ -815,6 +877,7 @@ export async function createControls(scene: Scene) {
     const point = worldPoint(event);
     if (!point) return;
     const tile = tileAt(point);
+    pointedPlot = plotAtTile(tile);
     if (fishing && sameTile(tile, fishing.tile)) {
       gameAction();
       return;
@@ -929,7 +992,7 @@ export async function createControls(scene: Scene) {
       return;
     }
     const key = event.key.toLowerCase();
-    const panels = { b: 'bag', j: 'ledger', m: 'map' } as const;
+    const panels = { e: 'bag', j: 'ledger', m: 'map' } as const;
     if (!event.repeat && Object.hasOwn(panels, key)) {
       openPanel(panels[key as keyof typeof panels]);
       return;
@@ -953,6 +1016,9 @@ export async function createControls(scene: Scene) {
       if (fishing) endFishing('收起了钓线。');
       else if (placement) gameAction();
       else selectSlot(null);
+    } else if (key === 'q' && !event.repeat) {
+      event.preventDefault();
+      inspectSoil();
     } else if (key === 'f' && !event.repeat) {
       event.preventDefault();
       gameAction();
@@ -961,7 +1027,7 @@ export async function createControls(scene: Scene) {
       cancelHold();
       route = [];
       pendingTarget = null;
-      selected = hovered = null;
+      selected = hovered = pointedPlot = null;
       keys.add(key);
     }
   });
@@ -979,7 +1045,7 @@ export async function createControls(scene: Scene) {
       control.setPointerCapture(event.pointerId);
       route = [];
       pendingTarget = null;
-      selected = hovered = null;
+      selected = hovered = pointedPlot = null;
       keys.add(direction);
     });
     for (const name of ['pointerup', 'pointercancel', 'lostpointercapture']) {
@@ -987,6 +1053,7 @@ export async function createControls(scene: Scene) {
     }
   }
   actionButton.addEventListener('click', gameAction);
+  soilButton.addEventListener('click', () => inspectSoil());
   fishingReel.addEventListener('click', reelFish);
   for (const name of ['bag', 'ledger', 'map', 'saves'] as const) {
     node('game-' + name).addEventListener('click', () => openPanel(name));

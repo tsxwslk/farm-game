@@ -1,6 +1,6 @@
 import {
   BAG_SLOTS, HOTBAR_COLUMNS, ITEMS, STARTING_SEEDS, STARTING_TOOLS, TOOLS, WAREHOUSE_SLOTS,
-  type Item, type Tool,
+  type Item, type Quality, type Tool,
 } from './content';
 import type { Game } from './game';
 
@@ -12,6 +12,7 @@ export interface ItemStack {
   kind: 'item';
   id: Item;
   batches: Batch[];
+  quality?: Quality;
 }
 export type Stack = ItemStack | { kind: 'tool'; id: Tool };
 export type Storage = 'bag' | 'warehouse';
@@ -24,7 +25,10 @@ export function startingInventory(withSeeds = true) {
   const bag = Array<Stack | null>(BAG_SLOTS).fill(null);
   for (const [i, id] of STARTING_TOOLS.entries()) bag[i] = { kind: 'tool', id };
   const warehouse = Array<Stack | null>(WAREHOUSE_SLOTS).fill(null);
-  if (withSeeds) warehouse[0] = { kind: 'item', id: 'seeds', batches: [{ quantity: STARTING_SEEDS, deadline: null }] };
+  if (withSeeds) {
+    warehouse[0] = { kind: 'item', id: 'seeds', batches: [{ quantity: STARTING_SEEDS, deadline: null }] };
+    warehouse[1] = { kind: 'item', id: 'peaSeeds', batches: [{ quantity: 2, deadline: null }] };
+  }
   return { bag, warehouse };
 }
 
@@ -36,8 +40,12 @@ export function stackCount(stack: ItemStack) {
   return stack.batches.reduce((total, batch) => total + batch.quantity, 0);
 }
 
-export function count(game: Game, item: Item, storage: Storage = 'bag') {
-  return game[storage].reduce((sum, stack) => sum + (stack?.kind === 'item' && stack.id === item ? stackCount(stack) : 0), 0);
+function matchesItem(stack: Stack | null, item: Item, quality?: Quality): stack is ItemStack {
+  return stack?.kind === 'item' && stack.id === item && (quality === undefined || (stack.quality ?? 'normal') === quality);
+}
+
+export function count(game: Game, item: Item, storage: Storage = 'bag', quality?: Quality) {
+  return game[storage].reduce((sum, stack) => sum + (matchesItem(stack, item, quality) ? stackCount(stack) : 0), 0);
 }
 
 export function equippedStack(game: Game) {
@@ -71,7 +79,7 @@ export function moveStack(game: Game, from: SlotAddress, to: SlotAddress) {
   const stack = origin[from.index];
   const target = destination[to.index];
   if (!stack || target === undefined) return false;
-  const merge = stack.kind === 'item' && target?.kind === 'item' && stack.id === target.id;
+  const merge = stack.kind === 'item' && matchesItem(target, stack.id, stack.quality ?? 'normal');
   if (merge) {
     for (const batch of stack.batches) mergeBatch(target, batch);
     origin[from.index] = null;
@@ -87,23 +95,24 @@ export function moveStack(game: Game, from: SlotAddress, to: SlotAddress) {
   return true;
 }
 
-export function receive(game: Game, item: Item, quantity: number, deadline: number | null = null) {
-  const matching = game.bag.find(stack => stack?.kind === 'item' && stack.id === item);
+export function receive(game: Game, item: Item, quantity: number, deadline: number | null = null, quality: Quality = 'normal') {
+  const matching = game.bag.find(stack => matchesItem(stack, item, quality));
   if (matching?.kind === 'item') {
     mergeBatch(matching, { quantity, deadline });
     return;
   }
   const index = game.bag.indexOf(null);
-  if (index !== -1) game.bag[index] = { kind: 'item', id: item, batches: [{ quantity, deadline }] };
+  if (index !== -1) game.bag[index] = { kind: 'item', id: item, batches: [{ quantity, deadline }],
+    ...(quality === 'normal' ? {} : { quality }) };
 }
 
-export function batchesFor(game: Game, item: Item) {
-  return game.bag.flatMap((stack, index) => stack?.kind === 'item' && stack.id === item
+export function batchesFor(game: Game, item: Item, quality?: Quality) {
+  return game.bag.flatMap((stack, index) => matchesItem(stack, item, quality)
     ? stack.batches.map(batch => ({ stack, index, batch })) : []);
 }
 
-export function consume(game: Game, item: Item, quantity: number, neededUntil = Infinity, slot?: number): number | null {
-  const stock = batchesFor(game, item).filter(({ index }) => slot === undefined || index === slot);
+export function consume(game: Game, item: Item, quantity: number, neededUntil = Infinity, slot?: number, quality?: Quality): number | null {
+  const stock = batchesFor(game, item, quality).filter(({ index }) => slot === undefined || index === slot);
   // Use an eligible batch for recipes, and spend expired stock first for ordinary uses.
   stock.sort((a, b) => priority(a.batch) - priority(b.batch));
   function priority(batch: Batch) {
@@ -126,8 +135,8 @@ export function consume(game: Game, item: Item, quantity: number, neededUntil = 
   return deadline;
 }
 
-export function hasRoom(game: Game, item: Item, removing?: number) {
+export function hasRoom(game: Game, item: Item, removing?: number, quality: Quality = 'normal') {
   const outgoing = removing === undefined ? null : game.bag[removing];
-  return count(game, item) > 0 || game.bag.includes(null) ||
+  return count(game, item, 'bag', quality) > 0 || game.bag.includes(null) ||
     (outgoing?.kind === 'item' && stackCount(outgoing) === 1);
 }

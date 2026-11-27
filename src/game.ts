@@ -1,18 +1,21 @@
 import {
-  BAG_SLOTS, BAG_UPGRADE_PRICES, COMMISSIONS, CROPS, CROP_IDS, ENTRIES, HOTBAR_COLUMNS, ITEMS, KILN_COST, RECIPES, RESOURCES, SOUTH_PASS, STATIONS,
+  BAG_SLOTS, BAG_UPGRADE_PRICES, BUILD_COSTS, COMMISSIONS, CROPS, CROP_IDS, ENTRIES, HOTBAR_COLUMNS, ITEMS, QUALITY_LABELS, RECIPES, RESOURCES, SOUTH_PASS, STATIONS,
   STATION_ITEMS, TILL_HITS, TOOLS, TRACE_IDS, TRACES, TRADE, WAREHOUSE_SLOTS, WAREHOUSE_UPGRADE, WATER_CAPACITY,
-  type CommissionId, type EntryId, type Item, type Point, type Recipe, type RecipeId, type Station, type Tool, type TraceId, type TraceState,
+  isCrop, isSeedTradeItem, type CommissionId, type EntryId, type Item, type Point, type Quality, type Recipe, type RecipeId,
+  type SeedTradeItem, type Station, type Tool, type TraceId, type TraceState,
 } from './content';
 import type { CropStage, Plot, Target, World } from './scene';
 import { batchesFor, consume, count, equippedStack, equippedTool, hasRoom, receive, startingInventory, type Stack, type Storage } from './inventory';
 import { liuwanWeather } from './weather';
+import { compostGain, harvestQuality, newSoil, recordHarvest, restSoil } from './soil';
 
 export const DAY = 1080;
 export const START: Point = [11, 6];
-export const SAVE_VERSION = 10;
+export const SAVE_VERSION = 12;
 export interface Entry {
   lit: boolean;
   deadline: number | null;
+  qualities?: Quality[];
 }
 export interface Job {
   recipe: RecipeId;
@@ -20,6 +23,11 @@ export interface Job {
   at: number;
   deadlines: Partial<Record<Item, number | null>>;
   ready: boolean;
+}
+export interface PlacedStation {
+  kind: Station;
+  tile: Point;
+  job: Job | null;
 }
 export interface Action {
   key: string;
@@ -42,11 +50,10 @@ export interface Game {
   water: number;
   coins: number;
   plots: Plot[];
-  stations: Partial<Record<Station, Point>>;
+  stations: Record<string, PlacedStation>;
   bag: (Stack | null)[];
   warehouse: (Stack | null)[];
   entries: Partial<Record<EntryId, Entry>>;
-  jobs: Partial<Record<Station, Job>>;
   strikes: Record<string, number>;
   depleted: Record<string, number>;
   action: Action | null;
@@ -56,6 +63,7 @@ export interface Game {
   traces: Record<TraceId, TraceState>;
   seedStock: number;
   pakChoiSeedStock: number;
+  peaSeedStock: number;
   log: string[];
   account: Account;
 }
@@ -64,9 +72,10 @@ export function newGame(world: World): Game {
   return {
     schemaVersion: SAVE_VERSION,
     day: 1, minute: 0, review: false, position: [...START], hotbarRow: 0, equippedSlot: null, water: 0, coins: 0,
-    plots: world.plots.map(() => ({ tilled: false, planted: null, watered: null, crop: null })),
-    stations: {}, ...startingInventory(), entries: {}, jobs: {}, strikes: {}, depleted: {}, action: null,
+    plots: world.plots.map(() => ({ tilled: false, planted: null, watered: null, crop: null, soil: newSoil() })),
+    stations: {}, ...startingInventory(), entries: {}, strikes: {}, depleted: {}, action: null,
     chestOpened: false, submitted: false, seedStock: TRADE.dailySeeds, pakChoiSeedStock: TRADE.dailySeeds, log: [],
+    peaSeedStock: TRADE.dailySeeds,
     commissions: { radishStockDay: 0, trailFood: false },
     traces: Object.fromEntries(TRACE_IDS.map(id => [id, 'unfound'])) as Game['traces'],
     account: { income: 0, expenses: 0, royalties: 0 },
@@ -147,35 +156,43 @@ export function hasMaterials(game: Game, items: Partial<Record<Item, number>>) {
 }
 
 export function canBuild(game: Game, station: Station) {
-  if (game.stations[station]) return false;
-  if (station === 'jar') return count(game, 'crock') > 0;
-  return !count(game, 'kiln') && !count(game, 'kiln', 'warehouse') && hasMaterials(game, KILN_COST);
+  const item = STATION_ITEMS[station];
+  const materials = BUILD_COSTS[station];
+  if (!materials) return count(game, item) > 0;
+  return hasMaterials(game, materials);
+}
+
+export function stationKey(tile: Point) {
+  return 'station-' + tile.join(',');
 }
 
 export function place(game: Game, station: Station, point: Point, slot?: number) {
-  if (game.review || game.stations[station]) return null;
+  const key = stationKey(point);
+  if (game.review || game.stations[key] || key === stationKey(game.position)) return null;
   const item = STATION_ITEMS[station];
   if (slot !== undefined) {
     const stack = game.bag[slot];
     if (stack?.kind !== 'item' || stack.id !== item) return null;
     consume(game, item, 1, Infinity, slot);
   } else if (!canBuild(game, station)) return null;
-  else if (station === 'kiln') {
-    for (const [item, quantity] of itemCounts(KILN_COST)) consume(game, item, quantity);
-  } else consume(game, item, 1);
-  game.stations[station] = point;
+  else {
+    const materials = BUILD_COSTS[station] ?? { [item]: 1 };
+    for (const [material, quantity] of itemCounts(materials)) consume(game, material, quantity);
+  }
+  game.stations[key] = { kind: station, tile: point, job: null };
   return '已摆放' + STATIONS[station] + '。';
 }
 
-export function packStation(game: Game, station: Station) {
-  if (game.review || !game.stations[station]) return { ok: false, message: '这里没有可收起的设施。' };
-  const job = game.jobs[station];
+export function packStation(game: Game, key: string) {
+  const station = game.stations[key];
+  if (game.review || !station) return { ok: false, message: '这里没有可收起的设施。' };
+  const { kind, job } = station;
   if (job) return { ok: false, message: job.ready ? '请先领取成品。' : '加工完成后才能收起。' };
-  const item = STATION_ITEMS[station];
+  const item = STATION_ITEMS[kind];
   if (!hasRoom(game, item)) return { ok: false, message: '背包满了，腾出一格后再收起。' };
   receive(game, item, 1);
-  delete game.stations[station];
-  return { ok: true, message: '已收起' + STATIONS[station] + '，可从快捷栏重新摆放。' };
+  delete game.stations[key];
+  return { ok: true, message: '已收起' + STATIONS[kind] + '，可从快捷栏重新摆放。' };
 }
 
 export function catchFish(game: Game) {
@@ -208,7 +225,11 @@ export function targetAction(game: Game, target: Target): { label: string; tool?
       }
       const stage = cropStage(game, plot);
       if (stage === 'ground') return { tool: 'hoe' as const, label: '翻地', hits: TILL_HITS };
-      if (stage === 'tilled') return { label: '播种' };
+      if (stage === 'tilled') {
+        const held = equippedStack(game);
+        const seed = CROP_IDS.some(id => CROPS[id].seed === held?.id);
+        return { label: held?.id === 'compost' ? '施堆肥' : seed ? '播种' : '查看土壤' };
+      }
       if (stage === 'seed') return { tool: 'can' as const, label: '浇水' };
       if (stage === 'ripe') return { label: '收获' };
       return { label: '查看长势' };
@@ -284,6 +305,14 @@ export function operate(
   }
   if (target.kind !== 'plot') return label;
   const plot = game.plots[Number(target.id)];
+  if (label === '施堆肥') {
+    const gain = compostGain(plot.soil);
+    if (!gain.nutrients && !gain.microbes) return '这块地的主养分和菌群已经充足。';
+    consume(game, 'compost', 1, Infinity, game.equippedSlot!);
+    plot.soil.nutrients += gain.nutrients;
+    plot.soil.microbes += gain.microbes;
+    return '施了堆肥。主养分 +' + gain.nutrients + '，菌群健康 +' + gain.microbes + '。';
+  }
   if (label === '播种') {
     const crop = CROP_IDS.find(id => CROPS[id].seed === equippedStack(game)?.id);
     if (!crop) {
@@ -294,6 +323,7 @@ export function operate(
     consume(game, CROPS[crop].seed, 1, Infinity, game.equippedSlot!);
     plot.crop = crop;
     plot.planted = game.minute;
+    plot.soil.vacantSince = null;
     if (liuwanWeather(game.day) === 'rain') {
       plot.watered = game.minute;
       return '播下了' + ITEMS[crop] + '。雨水已经浇透菜畦。';
@@ -308,18 +338,26 @@ export function operate(
   }
   if (label === '收获' && plot.crop) {
     const { crop } = plot;
-    if (!hasRoom(game, crop)) return '背包满了。腾出一格后再收获。';
-    receive(game, crop, 1, discover(game, crop));
+    const quality = harvestQuality(plot.soil, crop);
+    const needed = Number(!count(game, crop, 'bag', quality)) + Number(!count(game, 'plantScraps', 'bag', 'normal'));
+    if (game.bag.filter(slot => slot === null).length < needed) return '背包空间不足。给作物和植物残料留出位置后再收获。';
+    receive(game, crop, 1, discover(game, crop), quality);
+    receive(game, 'plantScraps', 1);
+    const entry = game.entries[crop]!;
+    const qualities = entry.qualities ??= [];
+    if (!qualities.includes(quality)) qualities.push(quality);
+    recordHarvest(plot.soil, crop, game.minute);
     plot.crop = null;
     plot.planted = plot.watered = null;
-    return '收获' + ITEMS[crop] + ' ×1。';
+    return '收获' + ITEMS[crop] + ' ×1（' + QUALITY_LABELS[quality] + '）、植物残料 ×1。';
   }
   return growthStatus(game, plot);
 }
 
-export function startJob(game: Game, id: RecipeId) {
+export function startJob(game: Game, key: string, id: RecipeId) {
   const recipe: Recipe = RECIPES[id];
-  if (game.review || !game.stations[recipe.station] || game.jobs[recipe.station]) return '设施当前不可开工。';
+  const station = game.stations[key];
+  if (game.review || station?.kind !== recipe.station || station.job) return '设施当前不可开工。';
   if (recipe.requiresArchive && !game.submitted) return '请先在田记所归档柳湾第一卷。';
   if (recipe.requiresTrace && game.traces[recipe.requiresTrace] !== 'restored') return '请先到田记所复原种源。';
   if (!hasMaterials(game, recipe.inputs)) return '缺少材料。';
@@ -329,38 +367,40 @@ export function startJob(game: Game, id: RecipeId) {
     if (recipe.timedInputs?.includes(item)) deadlines[item] = consume(game, item, quantity, at);
     else consume(game, item, quantity);
   }
-  game.jobs[recipe.station] = { recipe: id, started: game.minute, at, deadlines, ready: false };
+  station.job = { recipe: id, started: game.minute, at, deadlines, ready: false };
   return '开始' + recipe.label + '。';
 }
 
-export function claimJob(game: Game, station: Station) {
-  const job = game.jobs[station];
-  if (!job?.ready) return '尚无待领成品。';
+export function claimJob(game: Game, key: string) {
+  const station = game.stations[key];
+  if (!station?.job?.ready) return '尚无待领成品。';
+  const { job } = station;
   const { output, outputQuantity, carryDeadline }: Recipe = RECIPES[job.recipe];
   if (!hasRoom(game, output)) return '背包满了，成品仍留在设施中。';
   receive(game, output, outputQuantity, carryDeadline ? job.deadlines[carryDeadline] ?? null : null);
-  delete game.jobs[station];
+  station.job = null;
   return '制成' + ITEMS[output] + ' ×' + outputQuantity + '，已放入背包。';
 }
 
 export function advance(game: Game, amount: number, onHit: (action: Action) => string | undefined): string[] {
   if (game.review || amount <= 0) return [];
   const end = Math.min(game.day * DAY, game.minute + amount);
-  const events: { at: number; station: Station | 'hit' }[] =
-    (Object.entries(game.jobs) as [Station, Job][]).filter(([, job]) => !job.ready && job.at <= end)
-    .map(([station, job]) => ({ at: job.at, station }));
-  if (game.action && game.action.at <= end) events.push({ at: game.action.at, station: 'hit' });
+  const events: { at: number; station: string | null }[] = [];
+  for (const [key, { job }] of Object.entries(game.stations)) {
+    if (job && !job.ready && job.at <= end) events.push({ at: job.at, station: key });
+  }
+  if (game.action && game.action.at <= end) events.push({ at: game.action.at, station: null });
   const notes: string[] = [];
   for (const event of events.sort((a, b) => a.at - b.at)) {
     game.minute = event.at;
-    if (event.station === 'hit') {
+    if (event.station === null) {
       const action = game.action!;
       game.action = null;
       const result = onHit(action);
       if (result) notes.push(result);
       continue;
     }
-    const job = game.jobs[event.station]!;
+    const job = game.stations[event.station].job!;
     job.ready = true;
     const recipe: Recipe = RECIPES[job.recipe];
     for (const { input, entry } of recipe.anchors ?? []) {
@@ -384,8 +424,10 @@ export function nextDay(game: Game, reviewDay: number) {
   game.review = false;
   game.seedStock = TRADE.dailySeeds;
   game.pakChoiSeedStock = TRADE.dailySeeds;
+  game.peaSeedStock = TRADE.dailySeeds;
   game.log = [];
   game.account = { income: 0, expenses: 0, royalties: 0 };
+  for (const plot of game.plots) restSoil(plot.soil, game.minute, DAY);
   waterByRain(game);
   return true;
 }
@@ -477,39 +519,51 @@ export function expandStorage(game: Game, storage: Storage, quotedSlots: number)
   return recordAccount(game, (storage === 'bag' ? '背包' : '仓库') + '已扩至 ' + offer.slots + ' 格，支出 ' + offer.price + ' 文。');
 }
 
-export function tradeLimit(game: Game, item: TradeItem) {
-  if (!game.submitted && (item === 'pakChoi' || item === 'pakChoiPickle' || item === 'pakChoiSeeds')) return 0;
-  if (item !== 'seeds' && item !== 'pakChoiSeeds') return count(game, item);
-  if (!hasRoom(game, item)) return 0;
-  return Math.min(item === 'seeds' ? game.seedStock : game.pakChoiSeedStock, Math.floor(game.coins / TRADE.buy[item]));
+const seedStockFields = { seeds: 'seedStock', pakChoiSeeds: 'pakChoiSeedStock', peaSeeds: 'peaSeedStock' } as const;
+
+export function seedStockFor(game: Game, item: SeedTradeItem) {
+  return game[seedStockFields[item]];
 }
 
-export function warnSale(game: Game, item: TradeItem, quantity: number) {
-  if (item !== 'radish' && item !== 'crucian' && item !== 'pakChoi' && item !== 'pakChoiPickle') return false;
+export function tradePrice(item: TradeItem, quality: Quality = 'normal') {
+  if (isSeedTradeItem(item)) return TRADE.buy[item];
+  const multiplier = isCrop(item) ? { normal: 100, good: 125, fine: 150 }[quality] : 100;
+  return Math.floor(TRADE.sell[item] * multiplier / 100);
+}
+
+export function tradeLimit(game: Game, item: TradeItem, quality: Quality = 'normal') {
+  if (!game.submitted && (item === 'pakChoi' || item === 'pakChoiPickle' || item === 'pakChoiSeeds')) return 0;
+  if (!isSeedTradeItem(item)) return count(game, item, 'bag', quality);
+  if (!hasRoom(game, item)) return 0;
+  return Math.min(seedStockFor(game, item), Math.floor(game.coins / TRADE.buy[item]));
+}
+
+export function warnSale(game: Game, item: TradeItem, quantity: number, quality: Quality = 'normal') {
+  if (!isCrop(item) && item !== 'crucian' && item !== 'pakChoiPickle') return false;
   const entry = item === 'pakChoiPickle' ? 'pakChoi' : item;
   if (game.entries[entry]?.lit) return false;
-  const fresh = batchesFor(game, item).some(({ batch }) => (batch.deadline ?? 0) > game.minute);
-  return fresh && quantity >= count(game, item);
+  const fresh = batchesFor(game, item).filter(({ batch }) => (batch.deadline ?? 0) > game.minute);
+  return fresh.length > 0 && fresh.every(({ stack }) => (stack.quality ?? 'normal') === quality) &&
+    quantity >= count(game, item, 'bag', quality);
 }
 
-export function trade(game: Game, item: TradeItem, quantity: number) {
-  if (game.review || !Number.isSafeInteger(quantity) || quantity < 1 || quantity > tradeLimit(game, item)) {
+export function trade(game: Game, item: TradeItem, quantity: number, quality: Quality = 'normal') {
+  if (game.review || !Number.isSafeInteger(quantity) || quantity < 1 || quantity > tradeLimit(game, item, quality)) {
     return { ok: false, message: '交易未完成，请确认数量、钱袋和背包。' };
   }
-  if (item === 'seeds' || item === 'pakChoiSeeds') {
-    const total = quantity * TRADE.buy[item];
+  const total = quantity * tradePrice(item, quality);
+  if (isSeedTradeItem(item)) {
     game.coins -= total;
     game.account.expenses += total;
-    if (item === 'seeds') game.seedStock -= quantity;
-    else game.pakChoiSeedStock -= quantity;
+    game[seedStockFields[item]] -= quantity;
     receive(game, item, quantity);
     return { ok: true, message: recordAccount(game, '买入' + ITEMS[item] + ' ×' + quantity + '，支出 ' + total + ' 文。') };
   }
-  const total = quantity * TRADE.sell[item];
-  consume(game, item, quantity);
+  consume(game, item, quantity, Infinity, undefined, quality);
   game.coins += total;
   game.account.income += total;
-  return { ok: true, message: recordAccount(game, '售出' + ITEMS[item] + ' ×' + quantity + '，收入 ' + total + ' 文。') };
+  const grade = isCrop(item) && quality !== 'normal' ? '（' + QUALITY_LABELS[quality] + '）' : '';
+  return { ok: true, message: recordAccount(game, '售出' + ITEMS[item] + grade + ' ×' + quantity + '，收入 ' + total + ' 文。') };
 }
 
 export function needsSeed(game: Game, crop: keyof typeof CROPS = 'radish') {
