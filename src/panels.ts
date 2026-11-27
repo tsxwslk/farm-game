@@ -1,11 +1,11 @@
 import {
-  COMMISSIONS, CROPS, CROP_IDS, ENTRIES, HOTBAR_COLUMNS, INVENTORY_INFO, ITEMS, KILN_COST, LIUWAN_ROWS, MUSTARD_TRACE,
-  RECIPES, RESOURCES, SOUTH_PASS, STATIONS, TRADE, WAREHOUSE_SLOTS, WATER_CAPACITY,
+  COMMISSIONS, CROPS, CROP_IDS, ENTRIES, HOTBAR_COLUMNS, INVENTORY_INFO, ITEMS, KILN_COST, LIUWAN_ROWS,
+  RECIPES, RESOURCES, SOUTH_PASS, STATIONS, TRACE_IDS, TRACES, TRADE, WAREHOUSE_SLOTS, WATER_CAPACITY,
   type CommissionId, type EntryId, type Point, type Recipe, type RecipeId, type Station,
 } from './content';
 import {
-  canBuild, canSubmit, canTravel, claimJob, claimMustardSeed, claimPakChoiSeeds, claimSeed, commissionStatus, costs, deliverCommission, expandStorage,
-  hasMaterials, jobMeter, mustardTraceVisible, needsSeed, restoreMustard, saveSeed, startJob, storageUpgrade, submit, trade, tradeLimit, warnSale,
+  canBuild, canSubmit, canTravel, claimJob, claimTraceSeed, claimPakChoiSeeds, claimSeed, commissionStatus, costs, deliverCommission, expandStorage,
+  hasMaterials, jobMeter, needsSeed, restoreTrace, saveSeed, startJob, storageUpgrade, submit, traceVisible, trade, tradeLimit, warnSale,
   type Game, type TradeItem,
 } from './game';
 import type { World } from './scene';
@@ -297,7 +297,7 @@ export function stationPanel(game: Game, station: Station, update: (message: str
   for (const id of Object.keys(RECIPES) as RecipeId[]) {
     const recipe: Recipe = RECIPES[id];
     if (recipe.station !== station || (id === 'fishSoup' && !game.entries.crucian) ||
-      (id === 'mustardPickle' && game.mustardTrace !== 'restored') ||
+      (recipe.requiresTrace && game.traces[recipe.requiresTrace] !== 'restored') ||
       (recipe.requiresArchive && !game.submitted)) continue;
     list.append(listRow(recipe.label + ' · ' + costs(recipe.inputs) + ' → ' + ITEMS[recipe.output] + ' ×' + recipe.outputQuantity,
       button('开工', () => update(startJob(game, id)), !hasMaterials(game, recipe.inputs), true)));
@@ -343,20 +343,28 @@ export class TradingBook {
     }), this.page === 'restore');
     tabs.append(boardTab, restoreTab);
     if (this.page === 'restore') {
-      const restored = game.mustardTrace === 'restored';
-      const held = count(game, 'mustardTrace') > 0;
-      const description = restored ? '芥菜种源已复原。收获的芥菜可以留种。' :
-        held ? '将背包里的芥菜余绪复原成两粒种子。' :
-        count(game, 'mustardTrace', 'warehouse') ? '芥菜余绪在仓库里，先取到背包。' : ENTRIES.mustard.clue;
-      const actions = element('div', undefined, 'sheet-actions');
-      if (restored && needsSeed(game, 'mustard')) {
-        actions.append(button('补领芥菜种子 ×1', () => { report(claimMustardSeed(game)); redraw(); }));
-      } else if (!restored) {
-        actions.append(button('复原芥菜种子 ×' + MUSTARD_TRACE.seedQuantity, () => { report(restoreMustard(game)); redraw(); }, !held));
+      const list = element('ul', undefined, 'sheet-list');
+      for (const id of TRACE_IDS) {
+        const { item, seedQuantity, inSouthPass } = TRACES[id];
+        if (inSouthPass && !canTravel(game)) continue;
+        const restored = game.traces[id] === 'restored';
+        const held = count(game, item) > 0;
+        const { seed } = CROPS[id];
+        const description = restored ? ITEMS[id] + '种源已复原，收获后可留种。' :
+          held ? '背包里的' + ITEMS[item] + '可复原为种子。' :
+          count(game, item, 'warehouse') ? ITEMS[item] + '在仓库里，先取到背包。' : ENTRIES[id].clue;
+        const row = element('li');
+        row.append(element('strong', ITEMS[id]), element('p', description, 'sheet-note'));
+        if (restored && needsSeed(game, id)) {
+          row.append(button('补领' + ITEMS[seed] + ' ×1', () => { report(claimTraceSeed(game, id)); redraw(); }));
+        } else if (!restored) {
+          row.append(button('复原' + ITEMS[seed] + ' ×' + seedQuantity, () => { report(restoreTrace(game, id)); redraw(); }, !held));
+        }
+        list.append(row);
       }
       this.refresh = () => {};
       this.focus = () => restoreTab.focus({ preventScroll: true });
-      parent.replaceChildren(tabs, element('p', description, 'sheet-note'), actions);
+      parent.replaceChildren(tabs, list);
       return;
     }
     if (this.page === 'commissions') {
@@ -514,42 +522,72 @@ export function forecastPanel(game: Game) {
       element('strong', WEATHER_LABELS[weather]));
     list.append(row);
   }
-  const hint = game.mustardTrace === 'unfound' ? '霾天沿林缘到旧制盐台西侧，可以寻找芥菜余绪。' : '';
+  const hint = game.traces.mustard === 'unfound' ? '霾天沿林缘到旧制盐台西侧，可以寻找芥菜余绪。' : '';
   return [list, element('p', '雨天会浇湿菜畦。' + hint, 'sheet-note')];
 }
 
+const ledgerIds = Object.keys(ENTRIES) as EntryId[];
+const ledgerSections = [...new Set(ledgerIds.map(id => ENTRIES[id].section))];
+
+function ledgerStatus(game: Game, id: EntryId) {
+  const entry = game.entries[id];
+  if (ENTRIES[id].section === '加工品册') return entry?.lit ? '已制成' : '待制成';
+  return entry?.lit ? '已上锚' : entry ? '待上锚' : '未发现';
+}
+
+function ledgerIllustration(game: Game, id: EntryId) {
+  const picture = element('span', undefined, 'ledger-illustration');
+  picture.classList.toggle('ledger-unlit', !game.entries[id]?.lit);
+  picture.setAttribute('aria-hidden', 'true');
+  picture.append(stackIcon({ kind: 'item', id, batches: [] }));
+  return picture;
+}
+
 export function ledgerPanel(game: Game, selected: EntryId, select: (id: EntryId) => void) {
-  const spread = element('div', undefined, 'ledger-spread');
-  const index = element('nav', undefined, 'ledger-index');
-  index.setAttribute('aria-label', '物志分册');
-  let section = '';
-  for (const [id, rule] of Object.entries(ENTRIES) as [EntryId, typeof ENTRIES[EntryId]][]) {
-    if (rule.section !== section) {
-      section = rule.section;
-      index.append(element('h3', section, 'section-title'));
-    }
-    index.append(setPressed(button(game.entries[id] ? ITEMS[id] : '待发现 · ' + ITEMS[id], () => select(id)), selected === id));
-  }
-  const entry = game.entries[selected];
+  const book = element('div', undefined, 'ledger-book');
+  const tabs = element('nav', undefined, 'ledger-tabs');
+  tabs.setAttribute('aria-label', '物志分册');
   const rule = ENTRIES[selected];
-  const page = element('article', undefined, 'ledger-page');
-  page.append(element('p', rule.section, 'sheet-note'), element('h3', ITEMS[selected]));
-  if (entry) {
-    const illustration = element('div', undefined, 'ledger-illustration');
-    illustration.append(stackIcon({ kind: 'item', id: selected, batches: [] }));
-    page.append(illustration);
+  for (const section of ledgerSections) {
+    tabs.append(setPressed(button(section, () => {
+      const first = ledgerIds.find(id => ENTRIES[id].section === section);
+      if (first && section !== rule.section) select(first);
+    }), section === rule.section));
   }
-  page.append(element('p', entry?.lit ? '已上锚' : entry ? '已发现' : '未发现', 'sheet-note'));
-  page.append(element('p', entry ? rule.use : rule.clue));
-  if (entry?.lit && rule.reward) page.append(element('p', '已结稿酬 ' + rule.reward + ' 文'));
+  const ids = ledgerIds.filter(id => ENTRIES[id].section === rule.section);
+  const lit = ids.filter(id => game.entries[id]?.lit).length;
+  const progress = element('p', '已点亮 ' + lit + ' / ' + ids.length, 'ledger-count');
+  const grid = element('div', undefined, 'ledger-grid');
+  grid.setAttribute('role', 'group');
+  grid.setAttribute('aria-label', rule.section + '条目');
+  for (const id of ids) {
+    const cell = button('', () => select(id));
+    cell.className = 'ledger-cell';
+    cell.classList.toggle('ledger-cell-unlit', !game.entries[id]?.lit);
+    cell.setAttribute('aria-label', ITEMS[id] + '，' + ledgerStatus(game, id));
+    setPressed(cell, selected === id);
+    cell.append(ledgerIllustration(game, id), element('span', ITEMS[id], 'ledger-cell-name'));
+    grid.append(cell);
+  }
+
+  const entry = game.entries[selected];
+  const detail = element('article', undefined, 'ledger-detail');
+  detail.setAttribute('aria-label', '条目详情');
+  const description = element('div', undefined, 'ledger-description');
+  const status = element('p', ledgerStatus(game, selected), 'ledger-status');
+  status.classList.toggle('ledger-status-lit', Boolean(entry?.lit));
+  description.append(element('h3', ITEMS[selected]), status,
+    element('p', entry ? rule.use : rule.clue));
+  if (entry?.lit && rule.reward) description.append(element('p', '已结稿酬 ' + rule.reward + ' 文', 'ledger-status'));
   if (entry?.deadline !== null && entry?.deadline !== undefined && !entry.lit) {
-    const remaining = element('p', undefined, 'sheet-note');
+    const remaining = element('p', undefined, 'ledger-status');
     remaining.id = 'ledger-remaining';
-    page.append(remaining);
+    description.append(remaining);
   }
-  if (game.submitted) page.append(element('p', '柳湾第一卷已归档。', 'sheet-note'));
-  spread.append(index, page);
-  return spread;
+  detail.append(ledgerIllustration(game, selected), description);
+  book.append(tabs, progress, grid, detail);
+  if (game.submitted) book.append(element('p', '柳湾第一卷已归档。', 'sheet-note'));
+  return book;
 }
 
 export function mapPanel(world: World, game: Game, ripples: Point[]) {
@@ -581,12 +619,22 @@ export function mapPanel(world: World, game: Game, ripples: Point[]) {
   if (inPass) {
     marker('返回柳湾', ...SOUTH_PASS.returnGate, '返');
     marker('山道路碑', ...SOUTH_PASS.waystone, '碑');
+    const perillaClue = {
+      unfound: traceVisible(game, 'perilla') ? '现在可采紫苏余绪' : '霾天或 18:00 后可寻紫苏余绪',
+      collected: '紫苏余绪已采集，可回田记所复原',
+      restored: '紫苏种源已复原',
+    }[game.traces.perilla];
+    marker('石阶药圃 · ' + perillaClue, ...SOUTH_PASS.herbTerrace, '圃');
+    for (const [id, { tile, actor }] of Object.entries(RESOURCES)) {
+      if (tile[1] < bounds.y || tile[1] >= bounds.y + bounds.height || game.depleted[id]) continue;
+      marker(actor === 'oak' ? '山道橡树' : '可采岩石', ...tile, actor === 'oak' ? '木' : '石');
+    }
   } else {
     marker('田记所', 6, 5, '所');
     for (const { label, tile, mark } of world.landmarks) marker(label, ...tile, mark);
     for (const tile of ripples) marker('涟漪钓点', ...tile, '钓');
     if (game.entries.rockSalt) marker('岩盐发现处', ...RESOURCES['buried-salt'].tile, '盐');
-    if (mustardTraceVisible(game)) marker('旧制盐台西侧 · 芥菜余绪', ...MUSTARD_TRACE.tile, '绪');
+    if (traceVisible(game, 'mustard')) marker('旧制盐台西侧 · 芥菜余绪', ...TRACES.mustard.tile, '绪');
     if (game.submitted) marker(canTravel(game) ? '南山道入口' : '南山道 · 备齐行粮后开放', ...SOUTH_PASS.gate, '道');
     for (const [station, position] of Object.entries(game.stations) as [Station, [number, number]][]) {
       marker(STATIONS[station], ...position, station === 'kiln' ? '灶' : '缸');

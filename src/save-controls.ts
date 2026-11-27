@@ -121,14 +121,28 @@ export function createSaveControls(scene: Scene, body: HTMLElement, current: () 
       return;
     }
     try {
-      const saves = (await store.list()).flatMap(row => {
-        try { return [check(row)]; } catch { return []; }
-      }).sort((a, b) => b.savedAt.localeCompare(a.savedAt));
-      for (const save of saves) {
-        const active = save.id === gameId;
+      const saves = (await store.list()).map(({ id, data }): { id: string; save?: Save } => {
+        try {
+          const save = check(data);
+          return save.id === id ? { id, save } : { id };
+        } catch {
+          return { id };
+        }
+      }).sort((a, b) => (b.save?.savedAt ?? '').localeCompare(a.save?.savedAt ?? ''));
+      for (const { id, save } of saves) {
+        const active = id === gameId;
+        const title = active ? label(current()) : save ? label(save.game) : '无法读取的存档';
+        const date = save ? new Date(save.savedAt).toLocaleString() : '档位 ' + id.slice(-8);
         const line = element('li', undefined, 'sheet-row');
-        line.append(element('span', label(active ? current() : save.game)));
-        line.append(button(active ? '当前档位' : '读取此档', () => confirmSave(save, false), active));
+        const details = element('div');
+        details.append(element('div', title), element('small', date, 'sheet-note'));
+        const actions = element('div', undefined, 'sheet-actions');
+        if (active) actions.append(element('span', '当前档位', 'sheet-note'));
+        else {
+          if (save) actions.append(button('读取此档', () => confirmSave(save, false)));
+          actions.append(button('删除', () => confirmDelete(id, title, date)));
+        }
+        line.append(details, actions);
         slots.append(line);
       }
       if (!slots.children.length) slots.append(element('li', '暂无已保存的进度。'));
@@ -167,6 +181,37 @@ export function createSaveControls(scene: Scene, body: HTMLElement, current: () 
     body.replaceChildren(details, controls);
     report('');
   }
+
+  function confirmDelete(id: string, title: string, date: string) {
+    if (!store || busy || id === gameId) return;
+    const details = element('div', undefined, 'save-preview');
+    details.append(element('p', title), element('p', date, 'sheet-note'),
+      element('p', '永久删除这个本机档位？'));
+    const actions = element('div', undefined, 'sheet-actions');
+    const confirm = button('确认删除', () => void deleteSave(id, confirm), false, true);
+    actions.append(button('取消', render), confirm);
+    body.replaceChildren(details, actions);
+    report('');
+  }
+
+  async function deleteSave(id: string, confirm: HTMLButtonElement) {
+    if (!store || busy || !visible() || id === gameId) return;
+    busy = true;
+    confirm.disabled = true;
+    try {
+      const removed = await store.remove(id);
+      if (visible()) {
+        await render();
+        report(removed ? '已删除存档。' : '这个档位正在使用，请先切换档位。');
+      }
+    } catch {
+      if (visible()) report('未能删除存档，请重试。');
+    } finally {
+      confirm.disabled = false;
+      busy = false;
+    }
+  }
+
   picker.addEventListener('change', async () => {
     const file = picker.files?.[0];
     if (!file || busy) return;

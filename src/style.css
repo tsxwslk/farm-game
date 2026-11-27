@@ -22,6 +22,21 @@
 }
 .place-name span { color: var(--gold); font-size: 13px; }
 .place-name strong { font-size: 24px; letter-spacing: .12em; }
+#game-clock-button {
+  display: grid;
+  justify-items: end;
+  padding: 0 0 1px;
+  border: 0;
+  border-bottom: 1px dotted var(--seam);
+  background: transparent;
+  color: var(--paper);
+  font: inherit;
+  cursor: pointer;
+  pointer-events: auto;
+}
+#game-clock-button:hover { border-bottom-color: var(--gold); }
+#game-clock-status { font-size: 11px; }
+.clock-option { display: flex; gap: 8px; align-items: center; cursor: pointer; }
 #game-forecast {
   min-height: 28px;
   margin-top: 3px;
@@ -359,14 +374,66 @@
 .job-progress::-webkit-progress-bar { background: #dfd0ad; }
 .job-progress::-webkit-progress-value { background: repeating-linear-gradient(110deg, #526e49 0 9px, #658157 9px 12px); }
 .job-progress::-moz-progress-bar { background: repeating-linear-gradient(110deg, #526e49 0 9px, #658157 9px 12px); }
-.ledger-spread { display: grid; grid-template-columns: minmax(120px, 1fr) 1.75fr; min-height: 245px; }
-.ledger-index { padding-right: 14px; border-right: 1px solid var(--rule); }
-.ledger-index button { display: block; text-align: left; width: 100%; }
-.ledger-index button[aria-pressed="true"] { background: #e5d6b6; }
-.ledger-page { padding: 7px 0 8px 18px; }
-.ledger-page h3 { font: 700 21px/1.3 var(--reading); margin: 4px 0 12px; }
-.ledger-illustration > :is(img, canvas, .stack-composite) { display: block; width: 64px; height: 64px; object-fit: contain; image-rendering: pixelated; }
-.ledger-page p { margin-block: 7px; }
+.ledger-book {
+  --ledger-stamp: #8e412b;
+  --ledger-paper: #fcf5e6;
+  --ledger-muted: #615e58;
+  display: grid;
+  gap: 10px;
+}
+.ledger-tabs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(58px, 1fr));
+  gap: 6px;
+}
+.ledger-tabs button {
+  min-width: 0;
+  min-height: 42px;
+  padding: 4px 1px 7px;
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  border-radius: 0;
+  background: transparent;
+  font-family: var(--reading);
+}
+.ledger-tabs button[aria-pressed="true"] {
+  border-bottom: 2px solid var(--ledger-stamp);
+  color: var(--ledger-stamp);
+  font-weight: 700;
+}
+.ledger-count { margin: 0; text-align: right; color: var(--muted-ink); font-size: 12px; }
+.ledger-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 7px; }
+.ledger-grid .ledger-cell {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  place-items: center;
+  gap: 4px;
+  min-width: 0;
+  aspect-ratio: 1;
+  padding: 6px 3px;
+  background: var(--ledger-paper);
+}
+.ledger-grid .ledger-cell-unlit { color: var(--ledger-muted); background: #eeece6; }
+.ledger-grid .ledger-cell[aria-pressed="true"] { border-color: var(--ledger-stamp); box-shadow: inset 0 0 0 1px var(--ledger-stamp); }
+.ledger-cell-name { font-size: 12px; line-height: 1.25; text-align: center; overflow-wrap: anywhere; }
+.ledger-illustration { display: block; width: min(100%, 64px); aspect-ratio: 1; }
+.ledger-cell .ledger-illustration { width: auto; height: 100%; max-width: 100%; max-height: 64px; }
+.ledger-illustration > :is(img, canvas, .stack-composite) { display: block; width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated; }
+.ledger-unlit { filter: grayscale(1) contrast(.76); opacity: .64; }
+.ledger-detail {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 11px 13px;
+  border-block: 1px solid var(--rule);
+  background: var(--ledger-paper);
+}
+.ledger-description { display: grid; gap: 4px; }
+.ledger-description :is(h3, p) { margin: 0; }
+.ledger-description h3 { font: 700 20px/1.3 var(--reading); }
+.ledger-status { font-size: 12px; color: var(--ledger-muted); }
+.ledger-status-lit { color: var(--ledger-stamp); }
 .regional-map { position: relative; overflow: hidden; border: 1px solid var(--paper-edge); }
 .regional-map canvas { width: 100%; height: auto; display: block; image-rendering: pixelated; }
 .regional-map button {
@@ -413,11 +480,9 @@
   .storage-pair { grid-template-columns: 1fr; gap: 12px; }
 }
 @media (max-width: 500px) {
-  .ledger-spread { display: block; min-height: 0; }
-  .ledger-index { display: flex; flex-wrap: wrap; gap: 4px; padding: 0 0 7px; border: 0; border-bottom: 1px solid var(--rule); }
-  .ledger-index button { width: auto; }
-  .ledger-index .section-title { display: none; }
-  .ledger-page { padding-inline: 0; }
+  .ledger-tabs button { font-size: 13px; min-height: 44px; }
+  .ledger-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .ledger-detail { grid-template-columns: 48px minmax(0, 1fr); padding-inline: 8px; gap: 8px; }
 }
 @media (max-width: 400px) {
   .inventory-grid .slot-row { padding-inline: 2px; }

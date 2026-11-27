@@ -17,6 +17,7 @@ const iconFiles: Partial<Record<Tool | Item, string>> = {
   kiln: 'assets/kiln/salt-stove-inventory-16x16.png',
   crucian: 'assets/fish/crucian-32x32.png',
   fishSoup: 'assets/fish/crucian-soup-32x32.png',
+  perillaSoup: 'assets/fish/perilla-crucian-soup-32x32.png',
 };
 const pixels: Partial<Record<Item, Pixel[]>> = {
   wood: [[wood, 2, 7, 11, 5], [lightWood, 3, 7, 8, 2], [wood, 4, 5, 10, 3], [lightWood, 5, 4, 7, 2],
@@ -28,6 +29,8 @@ const pixels: Partial<Record<Item, Pixel[]>> = {
   salt: [[shadow, 2, 9, 12, 4], ['#a99c83', 3, 8, 10, 4], ['#e8dcca', 4, 7, 8, 3], ['#fbefdb', 6, 5, 4, 3]],
   mustardTrace: [['#3a625e', 4, 7, 8, 5], ['#6ea695', 5, 6, 6, 5], ['#b8d6aa', 6, 5, 4, 5],
     ['#e4e5b0', 7, 6, 2, 3], ['#a5c8a1', 3, 4, 2, 2], ['#c5d6a5', 11, 11, 2, 2]],
+  perillaTrace: [['#694354', 4, 7, 8, 5], ['#987088', 5, 6, 6, 5], ['#d5abc8', 6, 5, 4, 5],
+    ['#ffe0ee', 7, 6, 2, 3], ['#d5abc8', 3, 4, 2, 2], ['#d5abc8', 11, 11, 2, 2]],
 };
 
 function imageIcon(file: string) {
@@ -50,7 +53,10 @@ function pixelIcon(pixels: Pixel[]) {
 }
 
 export function stackIcon(stack: Stack) {
-  const crop = CROP_IDS.find(id => id === stack.id || CROPS[id].seed === stack.id || CROPS[id].pickle === stack.id);
+  const crop = CROP_IDS.find(id => {
+    const info = CROPS[id];
+    return id === stack.id || info.seed === stack.id || ('pickle' in info && info.pickle === stack.id);
+  });
   if (crop) {
     const harvest = imageIcon('assets/' + CROPS[crop].art + '/05-inventory.png');
     if (crop === stack.id) return harvest;
@@ -64,7 +70,7 @@ export function stackIcon(stack: Stack) {
     return container;
   }
   const file = iconFiles[stack.id];
-  if (!file) return pixelIcon((stack.kind === 'item' && pixels[stack.id]) || []);
+  if (!file || !assetUrl(file)) return pixelIcon((stack.kind === 'item' && pixels[stack.id]) || []);
   const image = imageIcon(file);
   if (stack.kind === 'tool') image.className = 'tool-icon';
   return image;

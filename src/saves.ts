@@ -1,6 +1,6 @@
 import * as z from 'zod';
 import { BAG_SLOTS, CROP_IDS, ENTRIES, HOTBAR_COLUMNS, ITEMS, LIUWAN_ROWS, MAX_BAG_SLOTS, RECIPES, RESOURCES, SOUTH_PASS, STARTING_TOOLS, STATIONS,
-  TILL_HITS, TOOLS, TRADE, WAREHOUSE_SLOTS, WATER_CAPACITY, type Tool } from './content';
+  TILL_HITS, TOOLS, TRACE_IDS, TRACE_STATES, TRACES, TRADE, WAREHOUSE_SLOTS, WATER_CAPACITY, type Tool } from './content';
 import { canTravel, DAY, SAVE_VERSION, waterByRain, type Game } from './game';
 import { count, equippedTool, startingInventory } from './inventory';
 import type { Plot, World } from './scene';
@@ -56,10 +56,15 @@ const gameV8 = gameV7.extend({
   bag: z.array(stack).min(BAG_SLOTS).max(MAX_BAG_SLOTS).refine(slots => slots.length % HOTBAR_COLUMNS === 0),
   warehouse: z.array(stack).min(WAREHOUSE_SLOTS).refine(slots => slots.length % WAREHOUSE_SLOTS === 0),
 });
-const gameSchema = gameV8.extend({
-  schemaVersion: z.literal(SAVE_VERSION),
-  mustardTrace: z.enum(['unfound', 'collected', 'restored']),
+const traceState = z.enum(TRACE_STATES);
+const gameV9 = gameV8.extend({
+  schemaVersion: z.literal(9),
+  mustardTrace: traceState,
   pakChoiSeedStock: whole.max(TRADE.dailySeeds),
+});
+const gameSchema = gameV9.omit({ mustardTrace: true }).extend({
+  schemaVersion: z.literal(SAVE_VERSION),
+  traces: z.record(z.enum(TRACE_IDS), traceState),
 });
 
 const saveSchema = z.strictObject({
@@ -189,8 +194,14 @@ const migrations: Partial<Record<number, (save: unknown, world: World) => unknow
   8(value) {
     const parsed = saveSchema.extend({ game: gameV8 }).safeParse(value);
     if (!parsed.success) throw new Error('旧存档格式有误。');
-    return { ...parsed.data, game: { ...parsed.data.game, schemaVersion: SAVE_VERSION,
+    return { ...parsed.data, game: { ...parsed.data.game, schemaVersion: 9,
       mustardTrace: 'unfound', pakChoiSeedStock: TRADE.dailySeeds } };
+  },
+  9(value) {
+    const parsed = saveSchema.extend({ game: gameV9 }).safeParse(value);
+    if (!parsed.success) throw new Error('旧存档格式有误。');
+    const { mustardTrace, ...game } = parsed.data.game;
+    return { ...parsed.data, game: { ...game, schemaVersion: 10, traces: { mustard: mustardTrace, perilla: 'unfound' } } };
   },
 };
 
@@ -207,6 +218,8 @@ export function validateSave(value: unknown, world: World): Save {
   if (!parsed.success) throw new Error('存档格式有误。');
 
   const { game } = parsed.data;
+  // Older saves also logged farm actions. Keep only the financial entries they still have.
+  game.log = game.log.filter(message => /(?:，(?:收入|支出) [1-9]\d* 文。|，稿酬 \+[1-9]\d* 文$)/.test(message));
   const { bounds } = SOUTH_PASS;
   const inBounds = ([x, y]: Game['position']) =>
     x < world.cols && y < world.rows && world.cells[y * world.cols + x] !== 'water' &&
@@ -259,12 +272,16 @@ export function validateSave(value: unknown, world: World): Save {
       game.entries.fishSoup?.lit || jobs.some(job => 'salt' in RECIPES[job.recipe].inputs)) {
     game.entries.salt ??= { lit: true, deadline: null };
   }
-  const traceCount = count(game, 'mustardTrace') + count(game, 'mustardTrace', 'warehouse');
-  if (traceCount !== Number(game.mustardTrace === 'collected') ||
-      (game.mustardTrace === 'restored') !== Boolean(game.entries.mustard)) {
-    throw new Error('存档内的芥菜余绪状态有误。');
+  for (const id of TRACE_IDS) {
+    const { item, inSouthPass } = TRACES[id];
+    const state = game.traces[id];
+    const held = count(game, item) + count(game, item, 'warehouse');
+    if (held !== Number(state === 'collected') || (state === 'restored') !== Boolean(game.entries[id]) ||
+        (inSouthPass && state !== 'unfound' && !canTravel(game))) {
+      throw new Error('存档内的余绪状态有误。');
+    }
   }
-  if (typeof version === 'number' && version < SAVE_VERSION) waterByRain(game);
+  if (typeof version === 'number' && version < 9) waterByRain(game);
   return parsed.data;
 }
 
@@ -286,28 +303,50 @@ export async function openSaves() {
     request.onerror = () => reject(request.error);
   });
   let queued: Promise<void> = Promise.resolve();
-  function write(save: Save, activate = false) {
+  function mutate(change: (store: IDBObjectStore) => void) {
     const commit = queued.then(() => new Promise<void>((resolve, reject) => {
       const transaction = db.transaction(STORE, 'readwrite');
       const store = transaction.objectStore(STORE);
       transaction.oncomplete = () => resolve();
       transaction.onabort = () => reject(transaction.error);
-      store.put(save, save.id);
-      if (activate) store.put(save.id, ACTIVE);
+      change(store);
     }));
     queued = commit.catch(() => {});
     return commit;
   }
   return {
-    write,
+    write(save: Save, activate = false) {
+      return mutate(store => {
+        store.put(save, save.id);
+        if (activate) store.put(save.id, ACTIVE);
+      });
+    },
+    async remove(id: string) {
+      if (id === ACTIVE) return false;
+      let removed = false;
+      await mutate(store => {
+        const request = store.get(ACTIVE);
+        request.onsuccess = () => {
+          if (request.result === id) return;
+          store.delete(id);
+          removed = true;
+        };
+      });
+      return removed;
+    },
     async active() {
       const store = db.transaction(STORE).objectStore(STORE);
       const id = await read<string | undefined>(store.get(ACTIVE));
       return id ? await read<unknown>(store.get(id)) : undefined;
     },
     async list() {
-      const rows = await read<unknown[]>(db.transaction(STORE).objectStore(STORE).getAll());
-      return rows.filter((row): row is object => typeof row === 'object' && row !== null);
+      const store = db.transaction(STORE).objectStore(STORE);
+      const [keys, rows] = await Promise.all([
+        read(store.getAllKeys()),
+        read<unknown[]>(store.getAll()),
+      ]);
+      return keys.flatMap((id, index) =>
+        typeof id === 'string' && id !== ACTIVE ? [{ id, data: rows[index] }] : []);
     },
   };
 }

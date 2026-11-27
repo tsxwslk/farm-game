@@ -1,4 +1,4 @@
-import type { CropId, Point, Station, Tool, SOUTH_PASS } from './content';
+import type { CropId, Point, Station, Tool, TraceId, TRACES, SOUTH_PASS } from './content';
 import type { Game } from './game';
 import type { Weather } from './weather';
 
@@ -23,6 +23,7 @@ export interface Target {
   kind: 'plot' | 'resource' | 'water' | 'chest' | 'archive' | 'ruin' | 'fishing' | 'trail' | 'return' | 'waystone' | 'trace' | Station;
   id?: string | number;
   label?: string;
+  trace?: TraceId;
   tile?: Point;
   footprint?: Point[];
   points: Point[];
@@ -78,12 +79,12 @@ declare global {
       routeTo(world: World, blocked: Set<number>, from: Point, destinations: Point[]): Point[] | null;
     };
     startLiuwanScene(options: {
-      layout: { resources: object; saltRuin: Point; southPass: typeof SOUTH_PASS; trace: Point };
+      layout: { resources: object; saltRuin: Point; southPass: typeof SOUTH_PASS; traces: typeof TRACES };
       cropStage: (game: Game, plot: Plot) => CropStage;
       cropArt: Record<CropId, { art: string }>;
       jobMeter: (job: import('./game').Job, minute: number) => { remaining: number; elapsed: number; duration: number };
       weatherForDay: (day: number) => Weather;
-      traceVisible: (game: Game) => boolean;
+      traceVisible: (game: Game, id: TraceId) => boolean;
       assetUrl: (file: string) => string;
       createControls: (scene: Scene) => void;
     }): void;

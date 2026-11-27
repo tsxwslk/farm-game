@@ -1,7 +1,7 @@
 import { CROPS, CROP_IDS, HOTBAR_COLUMNS, ITEMS, RECIPES, SOUTH_PASS, STATIONS, STATION_ITEMS, TOOLS, type EntryId, type Point, type Station } from './content';
 import {
   advance, canBuild, canTravel, catchFish, formatClock, growthStatus, jobMeter, newGame, nextDay, operate, packStation, place,
-  mustardTraceVisible, renewResources, targetAction, targetKey, targetProgress,
+  renewResources, targetAction, targetKey, targetProgress, traceVisible,
   type Game,
 } from './game';
 import { createHotbar } from './hotbar';
@@ -20,8 +20,17 @@ const PACK_HOLD_MS = 550;
 const SLOT_WHEEL_THRESHOLD = 32;
 const SLOT_WHEEL_PAUSE_MS = 95;
 const SLOT_WHEEL_NOTCH_MS = 28;
+const VISIBLE_CLOCK_KEY = 'wu-zhi-visible-clock';
 const MOVES: Record<string, Point> = { w: [0, -1], a: [-1, 0], s: [0, 1], d: [1, 0] };
-type Panel = 'bag' | 'warehouse' | 'ledger' | 'map' | 'saves' | 'archive' | 'forecast' | Station;
+type Panel = 'bag' | 'warehouse' | 'ledger' | 'map' | 'saves' | 'archive' | 'forecast' | 'clock' | Station;
+
+function useVisibleClock() {
+  try {
+    return localStorage.getItem(VISIBLE_CLOCK_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
 
 export async function createControls(scene: Scene) {
   const { world, canvas, view, zoom, targets, plotTargets, fishingSpots, blocked, draw, pick, setStations, canPlace } = scene;
@@ -33,6 +42,9 @@ export async function createControls(scene: Scene) {
   const dawnCurtain = node('dawn-curtain');
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
   const body = node('sheet-body');
+  const clock = node('game-clock');
+  const clockButton = node<HTMLButtonElement>('game-clock-button');
+  const clockStatus = node('game-clock-status');
   const message = node('depth-status');
   const sheetMessage = node('sheet-status');
   const actionButton = node<HTMLButtonElement>('game-action');
@@ -49,6 +61,7 @@ export async function createControls(scene: Scene) {
   let game = newGame(world);
   let previous = performance.now();
   let previousSave = previous;
+  let visibleClock = useVisibleClock();
   let route: Point[] = [];
   let pendingTarget: Target | null = null;
   let step: { to: Point; progress: number } | null = null;
@@ -125,7 +138,7 @@ export async function createControls(scene: Scene) {
     const tool = equippedTool(game);
     const matchesTool = (target: Target) => target.kind === 'fishing' ? tool === 'rod' :
       (target.kind !== 'water' || tool !== 'rod') && (target.kind !== 'trail' || game.submitted) &&
-      (target.kind !== 'trace' || mustardTraceVisible(game));
+      (target.kind !== 'trace' || target.trace === 'perilla' || Boolean(target.trace && traceVisible(game, target.trace)));
     if (selected && isNear(selected) && matchesTool(selected)) return selected;
     if (hovered && isNear(hovered) && matchesTool(hovered)) return hovered;
     if (tool === 'rod') {
@@ -293,7 +306,7 @@ export async function createControls(scene: Scene) {
       return;
     }
     if (target.kind === 'waystone') {
-      report('路碑残字「柳湾在北。雨后石滑，循石基而行。」');
+      report('路碑残字「碑东石阶，旧栽紫苏。」沿小径向东查看药圃。霾天或 18:00 后，石缝里的余绪会显形。');
       return;
     }
     if (target.kind === 'trail' || target.kind === 'return') {
@@ -317,7 +330,7 @@ export async function createControls(scene: Scene) {
     const firstWater = target.kind === 'plot' && game.plots.every(plot => plot.watered === null) &&
       !game.entries.radish && !game.entries.rockSalt;
     const result = operate(game, target, clearPlot);
-    if (target.kind === 'trace' && !mustardTraceVisible(game)) selected = hovered = null;
+    if (target.kind === 'trace' && target.trace === 'mustard' && !traceVisible(game, 'mustard')) selected = hovered = null;
     if (equippedTool(game) === 'can' && (result === '浇过水了。' || result === '水壶已装满。')) {
       hit = { tool: 'can', point: impactPoint(target), minute: game.minute };
     }
@@ -348,7 +361,7 @@ export async function createControls(scene: Scene) {
       return result;
     });
     if (notes.length) {
-      if (panel && panel !== 'map' && panel !== 'saves') {
+      if (panel && panel !== 'map' && panel !== 'saves' && panel !== 'clock') {
         if (panel === 'archive') tradingBook.refresh();
         else renderPanel();
         report(notes.at(-1)!, sheetMessage);
@@ -371,12 +384,11 @@ export async function createControls(scene: Scene) {
     node('review-title').textContent = '第 ' + game.day + ' 天 · 午夜日结';
     const { income, expenses, royalties } = game.account;
     const log = element('ul', undefined, 'sheet-list');
-    for (const entry of game.log.slice(-8)) log.append(element('li', entry));
+    for (const entry of game.log) log.append(element('li', entry));
     node('review-body').replaceChildren(
-      element('p', '出售 ' + income + ' 文 · 买入 ' + expenses + ' 文 · 稿酬 ' + royalties + ' 文'),
+      element('p', '收入 ' + income + ' 文 · 支出 ' + expenses + ' 文 · 稿酬 ' + royalties + ' 文'),
       element('p', '钱袋 ' + game.coins + ' 文', 'sheet-note'),
-      element('p', '柳湾明日天气 · ' + WEATHER_LABELS[liuwanWeather(game.day + 1)], 'sheet-note'),
-      log.children.length ? log : element('p', '今天没有新记录。', 'sheet-note'),
+      log.children.length ? log : element('p', '今天没有收支明细。', 'sheet-note'),
     );
     if (!review.open) review.showModal();
   }
@@ -440,7 +452,7 @@ export async function createControls(scene: Scene) {
     control.replaceChildren(text + ' ', element('kbd', key));
   }
 
-  function updateHud(now: number) {
+  function updateHud(now: number, focused: boolean) {
     const target = activeTarget() ?? hovered ?? selected;
     const action = target && targetAction(game, target);
     const progress = target ? targetProgress(game, target) : null;
@@ -463,13 +475,17 @@ export async function createControls(scene: Scene) {
     const inSouthPass = game.position[1] >= SOUTH_PASS.bounds.y;
     showText(node('game-region'), inSouthPass ? SOUTH_PASS.name : '柳湾');
     showText(node('game-forecast'), (inSouthPass ? '柳湾 · ' : '') + WEATHER_LABELS[liuwanWeather(game.day)] + ' · 预报');
+    const clockState = game.review || document.hidden ? '' : visibleClock ? '副屏计时' : focused ? '' : '已暂停';
+    showText(clockStatus, clockState);
     const minute = Math.floor(game.minute);
     if (minute !== renderedMinute) {
       renderedMinute = minute;
       showText(node('game-date'), '春 · 第 ' + game.day + ' 天');
-      showText(node('game-clock'), formatClock(game));
+      showText(clock, formatClock(game));
       tickPanel();
     }
+    const clockName = '计时设置，' + clock.textContent + (clockState ? '，' + clockState : '');
+    if (clockButton.getAttribute('aria-label') !== clockName) clockButton.setAttribute('aria-label', clockName);
   }
 
   function tickPanel() {
@@ -499,9 +515,18 @@ export async function createControls(scene: Scene) {
   function frame(now: number) {
     const dt = Math.min(.25, Math.max(0, (now - previous) / 1000));
     previous = now;
-    if (!saves.busy && dawnCurtain.hidden && !document.hidden && document.hasFocus() && !game.review) {
+    const focused = document.hasFocus();
+    if (!saves.busy && dawnCurtain.hidden && !document.hidden && (focused || visibleClock) && !game.review) {
+      // The reel requires active input, so keep its remaining time while the world advances.
+      if (!focused && fishing) {
+        fishing.at += dt;
+        if (fishing.reel) {
+          fishing.reel.started += dt;
+          fishing.reel.last += dt;
+        }
+      }
       applyTime(dt);
-      if (!game.review && !panel && !placement) move(dt);
+      if (focused && !game.review && !panel && !placement) move(dt);
     }
     const position: Point = step ? [
       game.position[0] + (step.to[0] - game.position[0]) * step.progress,
@@ -517,7 +542,7 @@ export async function createControls(scene: Scene) {
       packing: hold && { kind: hold.kind, progress: Math.min(1, Math.max(0, (now - hold.started) / PACK_HOLD_MS)) },
     });
     updateJobPanel();
-    updateHud(now);
+    updateHud(now, focused);
     if (!dawnCurtain.hidden && !dawnFade) revealDawn();
     if (!saves.busy && !game.review && !document.hidden && now - previousSave >= 180000) {
       previousSave = now;
@@ -582,7 +607,7 @@ export async function createControls(scene: Scene) {
     if (!panel) return;
     const mapTitle = game.position[1] >= SOUTH_PASS.bounds.y ? SOUTH_PASS.name + '地图' : '柳湾地图';
     const titles = { bag: '背包', warehouse: '仓库', ledger: '物志', map: mapTitle, saves: '存档',
-      archive: '田记所账面', forecast: '柳湾天气预报', ...STATIONS };
+      archive: '田记所账面', forecast: '柳湾天气预报', clock: '计时设置', ...STATIONS };
     node('sheet-title').textContent = titles[panel];
     const update = (text: string) => {
       renderPanel();
@@ -595,11 +620,41 @@ export async function createControls(scene: Scene) {
         void saves.save();
       });
     } else if (panel === 'ledger') {
-      body.replaceChildren(ledgerPanel(game, selectedEntry, id => { selectedEntry = id; renderPanel(); }));
+      const focused = document.activeElement;
+      const sectionFocused = focused?.closest('.ledger-tabs');
+      const entryFocused = focused?.closest('.ledger-grid');
+      body.replaceChildren(ledgerPanel(game, selectedEntry, id => {
+        if (id === selectedEntry) return;
+        selectedEntry = id;
+        renderPanel();
+      }));
+      if (sectionFocused || entryFocused) {
+        const group = sectionFocused ? '.ledger-tabs' : '.ledger-grid';
+        body.querySelector<HTMLButtonElement>(group + ' [aria-pressed="true"]')?.focus({ preventScroll: true });
+      }
     } else if (panel === 'map') {
       body.replaceChildren(...mapPanel(world, game, ripples));
     } else if (panel === 'forecast') {
       body.replaceChildren(...forecastPanel(game));
+    } else if (panel === 'clock') {
+      const option = element('label', undefined, 'clock-option');
+      const checkbox = element('input');
+      checkbox.type = 'checkbox';
+      checkbox.checked = visibleClock;
+      checkbox.setAttribute('aria-describedby', 'clock-option-note');
+      checkbox.addEventListener('change', () => {
+        visibleClock = checkbox.checked;
+        previous = performance.now();
+        try {
+          localStorage.setItem(VISIBLE_CLOCK_KEY, visibleClock ? '1' : '0');
+        } catch {
+          report('此浏览器无法保存计时设置，本次打开期间仍会生效。', sheetMessage);
+        }
+      });
+      option.append(checkbox, '窗口可见时继续计时');
+      const note = element('p', '适合把柳湾放在副屏。切走游戏标签页、最小化窗口或进入午夜日结时停表。', 'sheet-note');
+      note.id = 'clock-option-note';
+      body.replaceChildren(option, note);
     } else if (panel === 'bag' || panel === 'warehouse') {
       const scroll = sheet.scrollTop;
       const warehouse = panel === 'warehouse' ? { page: warehousePage, turn: turnWarehousePage } : null;
@@ -937,6 +992,7 @@ export async function createControls(scene: Scene) {
     node('game-' + name).addEventListener('click', () => openPanel(name));
   }
   node('game-forecast').addEventListener('click', () => openPanel('forecast'));
+  clockButton.addEventListener('click', () => openPanel('clock'));
   node('sheet-close').addEventListener('click', closePanel);
   sheet.addEventListener('cancel', event => { event.preventDefault(); closePanel(); });
   review.addEventListener('cancel', event => event.preventDefault());
@@ -954,7 +1010,7 @@ export async function createControls(scene: Scene) {
         canvas.focus({ preventScroll: true });
         const weather = liuwanWeather(next.day);
         report(weather === 'rain' ? '柳湾下起春雨，雨水会浇透菜畦。' :
-          weather === 'haze' && mustardTraceVisible(next) ? '柳湾起了霾。去旧制盐台西侧找找余绪。' : '新的一天开始了。');
+          weather === 'haze' && traceVisible(next, 'mustard') ? '柳湾起了霾。去旧制盐台西侧找找余绪。' : '新的一天开始了。');
       } else {
         node('review-body').append(element('p', '保存失败，请重新确认次日。'));
       }

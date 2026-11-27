@@ -30,7 +30,7 @@ window.startLiuwanScene = function ({layout, jobMeter, cropStage, cropArt, weath
   let previousFrame = '';
   let previousView = '';
   let trailRevealed = false;
-  let traceRevealed = false;
+  let visibleTraces = [];
 
   function layer() {
     const buffer = document.createElement('canvas');
@@ -45,6 +45,7 @@ window.startLiuwanScene = function ({layout, jobMeter, cropStage, cropArt, weath
   const groundLayer = layer();
   const scene = layer();
   const shadowMasks = new Map();
+  const resourcePixels = new Map();
   const sprites = {
     figure: {...window.GroundAssets.figure, contact: 18},
     cottage: D.cottage,
@@ -65,6 +66,7 @@ window.startLiuwanScene = function ({layout, jobMeter, cropStage, cropArt, weath
     }
     if (southPass) {
       sprites.waystone = {file: 'assets/south-pass/waystone-48x48.png', anchor: [24, 43], contact: 25};
+      sprites.herbTerrace = {file: 'assets/south-pass/herb-terrace-64x48.png', anchor: [32, 43]};
     }
   }
   const bedColors = {
@@ -106,11 +108,12 @@ window.startLiuwanScene = function ({layout, jobMeter, cropStage, cropArt, weath
   ] : demoActors;
   if (southPass) {
     const [x, y] = southPass.waystone;
+    const [terraceX, terraceY] = southPass.herbTerrace;
     fixedActors.push(at('waystone', x + .5, y + .6),
-      at('oak', 3.5, 36.5), at('oak', 11.5, 35.5), at('oak', 12.5, 40.5),
-      at('stone', 2.5, 39.5), at('stone', 10.5, 40.5), at('stone', 12.5, 37.5));
+      at('herbTerrace', terraceX + .5, terraceY + .6, {walkable: true}));
   }
   const mudPatches = fixedActors.filter(actor => actor.kind === 'clay');
+  const resourceKinds = new Set(fixedActors.filter(actor => actor.resource).map(actor => actor.kind));
   let actors = fixedActors;
   let plotStates = [];
 
@@ -293,12 +296,23 @@ window.startLiuwanScene = function ({layout, jobMeter, cropStage, cropArt, weath
     return {dx: -.81 * Math.cos(angle), dy: .48 - height * .32, strength};
   }
 
-  function drawDaylight(minute, sun) {
-    const index = daylight.findIndex(frame => frame[0] >= minute);
+  function drawDaylight(minute, sun, weather) {
+    // Cloud cover is at least as dark as 18:30. Keep the later night transition.
+    const dusk = 750;
+    const lightMinute = weather === 'clear' ? minute : Math.max(minute, dusk);
+    const index = daylight.findIndex(frame => frame[0] >= lightMinute);
     const start = daylight[Math.max(0, index - 1)];
     const end = daylight[index];
-    const progress = start === end ? 0 : (minute - start[0]) / (end[0] - start[0]);
-    const [, r, g, b, alpha] = start.map((value, i) => value + (end[i] - value) * progress);
+    const progress = start === end ? 0 : (lightMinute - start[0]) / (end[0] - start[0]);
+    let [, r, g, b, alpha] = start.map((value, i) => value + (end[i] - value) * progress);
+    if (weather !== 'clear') {
+      const weight = Math.max(0, 1 - (lightMinute - dusk) / 210);
+      const [red, green, blue, minAlpha] = weather === 'rain' ? [69, 85, 91, 0] : [90, 68, 26, .56];
+      r += (red - r) * weight;
+      g += (green - g) * weight;
+      b += (blue - b) * weight;
+      alpha = Math.max(alpha, minAlpha);
+    }
     scene.fillStyle = `rgba(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)}, ${alpha})`;
     scene.fillRect(view.x, view.y, view.width, view.height);
     if (sun.strength && Math.abs(sun.dx) > .02) {
@@ -311,15 +325,7 @@ window.startLiuwanScene = function ({layout, jobMeter, cropStage, cropArt, weath
     }
   }
 
-  function drawWeather(weather, phase) {
-    if (weather === 'clear') return;
-    if (weather === 'haze') {
-      scene.fillStyle = '#a6a58c36';
-      scene.fillRect(view.x, view.y, view.width, view.height);
-      return;
-    }
-    scene.fillStyle = '#5c7c9050';
-    scene.fillRect(view.x, view.y, view.width, view.height);
+  function drawRain(phase) {
     if (reducedMotion.matches) return;
     scene.fillStyle = '#b9e3e88c';
     const left = Math.floor(view.x / TILE), top = Math.floor(view.y / TILE);
@@ -335,19 +341,32 @@ window.startLiuwanScene = function ({layout, jobMeter, cropStage, cropArt, weath
     }
   }
 
-  function drawTrace(phase) {
-    const [col, row] = layout.trace;
-    const x = col * TILE + 16, y = row * TILE + 19;
+  function drawHaze(person) {
+    const far = Math.max(TILE * 5, Math.hypot(view.width, view.height) * .42);
+    const haze = scene.createRadialGradient(person.x, person.y, TILE, person.x, person.y, far);
+    haze.addColorStop(0, 'rgba(118, 102, 72, 0)');
+    haze.addColorStop(.25, 'rgba(118, 102, 72, .23)');
+    haze.addColorStop(.62, 'rgba(118, 102, 72, .50)');
+    haze.addColorStop(1, 'rgba(118, 102, 72, .70)');
+    scene.fillStyle = haze;
+    scene.fillRect(view.x, view.y, view.width, view.height);
+  }
+
+  function drawTrace(phase, target) {
+    const [col, row] = target.tile;
+    const perilla = target.trace === 'perilla';
+    // The terrace's front stone gap is nine pixels right of its anchor.
+    const x = col * TILE + TILE / 2 + (perilla ? 9 : 0), y = row * TILE + 19;
     const lift = reducedMotion.matches ? 0 : Math.round(Math.sin(phase / 4) * 2);
-    scene.fillStyle = '#72998d62';
+    scene.fillStyle = perilla ? '#a1729a86' : '#72998d62';
     scene.fillRect(x - 9, y - 3, 18, 6);
-    scene.fillStyle = '#3d625c';
+    scene.fillStyle = perilla ? '#694354' : '#3d625c';
     scene.fillRect(x - 5, y - 7 + lift, 10, 6);
-    scene.fillStyle = '#b9d7a9';
+    scene.fillStyle = perilla ? '#d5abc8' : '#b9d7a9';
     scene.fillRect(x - 3, y - 8 + lift, 6, 5);
     scene.fillRect(x - 6, y - 11 + lift, 2, 2);
     scene.fillRect(x + 5, y - 4 + lift, 2, 2);
-    scene.fillStyle = '#f0edb3';
+    scene.fillStyle = perilla ? '#ffe0ee' : '#f0edb3';
     scene.fillRect(x - 1, y - 10 + lift, 3, 5);
   }
 
@@ -505,7 +524,10 @@ window.startLiuwanScene = function ({layout, jobMeter, cropStage, cropArt, weath
     }
     const dayMinute = Math.floor(Math.min(G.DAY, Math.max(0, game.minute - (game.day - 1) * G.DAY)));
     const sun = layout ? sunAt(dayMinute) : null;
-    for (const actor of visible) shadow(actor, sun);
+    if (sun && weather !== 'clear') sun.strength = 0;
+    if (weather !== 'rain') {
+      for (const actor of visible) shadow(actor, sun);
+    }
     if (hovered?.kind === 'plot') {
       const plot = world.plots[hovered.id];
       scene.strokeStyle = '#fff7bb';
@@ -551,10 +573,11 @@ window.startLiuwanScene = function ({layout, jobMeter, cropStage, cropArt, weath
       drawWorkImpact(motion.hit, hitFrame);
     }
     if (layout) {
-      drawDaylight(dayMinute, sun);
-      if (regionAt(position) === liuwan) {
-        drawWeather(weather, phase);
-        if (traceRevealed) drawTrace(phase);
+      drawDaylight(dayMinute, sun, weather);
+      if (weather === 'rain') drawRain(phase);
+      if (weather === 'haze') drawHaze(person);
+      for (const target of visibleTraces) {
+        if (regionAt(target.tile) === regionAt(position)) drawTrace(phase, target);
       }
       drawFishing(person, motion, phase);
     }
@@ -608,7 +631,7 @@ window.startLiuwanScene = function ({layout, jobMeter, cropStage, cropArt, weath
 
   function draw(game, position, hovered, placement, motion) {
     trailRevealed = game.submitted;
-    traceRevealed = traceVisible?.(game) ?? false;
+    visibleTraces = traceTargets.filter(target => traceVisible?.(game, target.trace));
     const width = stage.clientWidth, height = stage.clientHeight;
     if (width < 1 || height < 1) return;
     const region = regionAt(position);
@@ -631,7 +654,7 @@ window.startLiuwanScene = function ({layout, jobMeter, cropStage, cropArt, weath
     const phase = layout && !reducedMotion.matches ? Math.floor(game.minute * 12) : 0;
     const hitFrame = motion?.hit ? Math.floor((game.minute - motion.hit.minute) * 20) : 0;
     const swingFrame = layout && game.action ? Math.floor((game.action.at - game.minute) * 22) : 0;
-    const signature = JSON.stringify([position, hovered?.kind, hovered?.id, game.stations, placement, game.submitted, traceRevealed,
+    const signature = JSON.stringify([position, hovered?.kind, hovered?.id, game.stations, placement, game.submitted, visibleTraces.map(target => target.id),
       layout ? [game.strikes, game.depleted, Boolean(game.entries.rockSalt), game.action?.key, swingFrame,
         phase, game.day, Math.floor(game.minute), reducedMotion.matches, motion.facing, motion.hit, hitFrame,
         motion.fishing, motion.ripples, motion.packing] : game.minute >= game.mineReady,
@@ -715,10 +738,12 @@ window.startLiuwanScene = function ({layout, jobMeter, cropStage, cropArt, weath
     {kind: 'forage', site: 'woods', actor: 'seedBox', label: '收集种子', points: [[16, 5]]},
     ...plotTargets,
   ];
-  if (layout?.trace) {
-    const tile = layout.trace;
-    targets.push({kind: 'trace', label: '芥菜余绪', tile, points: [tile, ...adjacent(tile)]});
-  }
+  const resourceTargets = new Map(targets.filter(target => target.kind === 'resource').map(target => [target.id, target]));
+  const traceTargets = Object.entries(layout?.traces ?? {}).map(([id, {tile, place, inSouthPass}]) => ({
+    kind: 'trace', id, trace: id, label: place, tile, actor: inSouthPass ? 'herbTerrace' : undefined,
+    points: [tile, ...adjacent(tile)],
+  }));
+  targets.push(...traceTargets);
   if (southPass) {
     const trailTargets = [
       ['trail', southPass.gate, '南山道入口'],
@@ -742,7 +767,7 @@ window.startLiuwanScene = function ({layout, jobMeter, cropStage, cropArt, weath
     }
   }
   for (const actor of fixedActors) {
-    if (actor.kind === 'cottage' || actor.resource) continue;
+    if (actor.kind === 'cottage' || actor.resource || actor.walkable) continue;
     const cell = index([Math.floor(actor.x / TILE), Math.floor(actor.y / TILE)]);
     (actor.forgotten ? restoredScenery : scenery).add(cell);
   }
@@ -795,6 +820,7 @@ window.startLiuwanScene = function ({layout, jobMeter, cropStage, cropArt, weath
     const occupied = new Set(obstacles(stations, game));
     const origin = regionAt(game.position) === liuwan ? game.position : archiveDoor[0];
     return targets.filter(target => target.kind !== 'plot' && target.kind !== 'return' && target.kind !== 'waystone' && target.kind !== 'trace' &&
+      (!target.tile || regionAt(target.tile) === liuwan) &&
       (!layout || target.kind !== 'resource' || !game.depleted[target.id]) &&
       (!layout || target.points.length || stations[target.kind])).every(target => {
       const points = stations[target.kind] ? adjacent(stations[target.kind]) : target.points;
@@ -802,13 +828,29 @@ window.startLiuwanScene = function ({layout, jobMeter, cropStage, cropArt, weath
     });
   }
 
+  function pickResourceSprite(x, y) {
+    let front;
+    for (const actor of actors) {
+      const pixels = resourcePixels.get(actor.kind);
+      if (!actor.resource || !pixels || (front && front.y > actor.y)) continue;
+      const {anchor, frameSize, frames} = sprites[actor.kind];
+      const localX = Math.floor(x - actor.x + anchor[0]);
+      const localY = Math.floor(y - actor.y + anchor[1]);
+      const width = frameSize ?? pixels.width;
+      if (localX < 0 || localX >= width || localY < 0 || localY >= pixels.height) continue;
+      const column = frameSize ? E.hash(actor.x, actor.y) % frames : 0;
+      if (pixels.data[(localY * pixels.width + column * width + localX) * 4 + 3]) front = actor;
+    }
+    return front && resourceTargets.get(front.id);
+  }
+
   function pick(x, y, tool) {
     const plot = E.plotAt(world, x, y);
     if (layout) {
       const col = Math.floor(x / TILE), row = Math.floor(y / TILE);
-      if (traceRevealed && col === layout.trace[0] && row === layout.trace[1]) {
-        return targets.find(target => target.kind === 'trace');
-      }
+      const trace = traceTargets.find(target => (target.actor || visibleTraces.includes(target)) &&
+        target.tile[0] === col && target.tile[1] === row);
+      if (trace) return trace;
       if (tool === 'rod' && col >= world.shoreColumns[row]) {
         const spot = fishingByTile.get([col, row].join(','));
         const accessible = candidate => candidate.points.some(point => G.passable(world, blocked, ...point));
@@ -829,9 +871,9 @@ window.startLiuwanScene = function ({layout, jobMeter, cropStage, cropArt, weath
       const water = waterRows[row];
       if (water && (col >= world.shoreColumns[row] ||
         (tool === 'can' && water.points.some(([bank]) => bank === col)))) return water;
-      const tree = actors.find(actor => actor.resource && isTree(actor.kind) &&
+      const resource = actors.find(actor => actor.resource &&
         actor.resource.tile[0] === col && actor.resource.tile[1] === row);
-      if (tree) return targets.find(target => target.kind === 'resource' && target.id === tree.id);
+      if (resource) return resourceTargets.get(resource.id);
       if (plot && !blocked.has(index([col, row])) &&
         (tool === 'hoe' || (plotStates[plot.id]?.tilled && [undefined, 'pick', 'can'].includes(tool)))) {
         return plotTargets[plot.id];
@@ -840,9 +882,12 @@ window.startLiuwanScene = function ({layout, jobMeter, cropStage, cropArt, weath
         const spot = fishingSpots.find(candidate => candidate.points.some(([x, y]) => x === col && y === row));
         if (spot) return spot;
       }
+      const spriteTarget = pickResourceSprite(x, y);
+      if (spriteTarget) return spriteTarget;
     }
     for (const target of targets) {
       if (!target.actor) continue;
+      if (target.kind === 'resource' && resourcePixels.has(target.actor)) continue;
       if (target.actor === 'clay') {
         const [col, row] = target.tile;
         if (Math.floor(x / TILE) === col && Math.floor(y / TILE) === row) return target;
@@ -892,6 +937,7 @@ window.startLiuwanScene = function ({layout, jobMeter, cropStage, cropArt, weath
         mask.height = image.height;
         const context = mask.getContext('2d');
         context.drawImage(image, 0, 0);
+        if (resourceKinds.has(key)) resourcePixels.set(key, context.getImageData(0, 0, mask.width, mask.height));
         context.globalCompositeOperation = 'source-in';
         context.fillStyle = '#1c2525';
         context.fillRect(0, 0, mask.width, mask.height);

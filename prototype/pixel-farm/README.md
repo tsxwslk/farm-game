@@ -30,6 +30,9 @@ python -m http.server 8766 --bind 127.0.0.1
 - 田记所旧址使用 `assets/house/house-cottage-128x104.png`，脚点为 `(64, 96)`，投影根据房屋轮廓生成。
 - 院内和恢复后的腌菜缸使用 `assets/jar/jar-crock-48x48.png`，脚点为 `(24, 44)`，投影根据缸身轮廓生成。
 - 正式版小白菜使用 `assets/pak-choi/` 下的四张 48×72 田间图，脚点统一为 `(24, 66)`，另有 32×32 背包收获图 `05-inventory.png`。素材由 `draw-pak-choi.lua` 经 Aseprite 批处理生成。
+- 紫苏使用 `assets/perilla/` 下的四张 48×72 田间图，脚点统一为 `(24, 66)`，背包收获图为同目录 `05-inventory.png`（32×32）。均由 `draw-perilla.lua` 经 Aseprite 批处理生成。
+- 紫苏鲫鱼汤使用 `assets/fish/perilla-crucian-soup-32x32.png`（32×32，碗形与 `crucian-soup-32x32.png` 逐像素一致，只多一层紫苏叶）；紫苏层单图在 `perilla-leaf-layer-32x32.png`，由 `draw-perilla-soup.lua` 生成，图层 Bowl / Soup / Perilla / Steam 均可单独编辑。
+- 南山道石阶药圃使用 `assets/south-pass/herb-terrace-64x48.png`，脚点 `(32,43)`；后排薄石沿、左右一像素短石与前三片石板围出中间那块深土，前排 x40~41 的暗缝留给紫苏余绪。由 `assets/south-pass/draw-herb-terrace.lua` 生成。
 
 ## 源文件与生成
 

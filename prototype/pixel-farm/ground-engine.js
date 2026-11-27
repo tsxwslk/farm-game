@@ -109,6 +109,11 @@
       rect(returnGate[0], returnGate[1] + 4, 4, 1, 'path');
       rect(waystone[0], returnGate[1] + 4, 1, waystone[1] - returnGate[1] - 3, 'path');
       rect(waystone[0] - 2, waystone[1], 5, 2, 'bare');
+      if (southPass.herbTerrace) {
+        const [east, row] = southPass.herbTerrace;
+        rect(waystone[0], row - 1, east - waystone[0] + 1, 1, 'path');
+        rect(east, row - 1, 1, 2, 'path');
+      }
       rect(bounds.x + 1, bounds.y + 2, 2, 5, 'bare');
       rect(bounds.x + bounds.width - 4, bounds.y + 6, 3, 4, 'bare');
     }

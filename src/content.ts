@@ -20,6 +20,10 @@ export const ITEMS = {
   mustardSeeds: '芥菜种子',
   mustard: '芥菜',
   mustardPickle: '盐渍芥菜',
+  perillaTrace: '紫苏余绪',
+  perillaSeeds: '紫苏种子',
+  perilla: '紫苏',
+  perillaSoup: '紫苏鲫鱼汤',
 } as const;
 export type Item = keyof typeof ITEMS;
 
@@ -57,6 +61,10 @@ export const INVENTORY_INFO = {
   mustardSeeds: ['种子', '在田记所复原所得，可在翻好的菜畦里播种。'],
   mustard: ['作物', '可留种，也可加入粗盐制成盐渍芥菜。'],
   mustardPickle: ['加工品', '以芥菜和粗盐腌成的咸菜。'],
+  perillaTrace: ['余绪', '在南山道石阶药圃找到，带回田记所复原种子。'],
+  perillaSeeds: ['种子', '在田记所复原所得，可在柳湾菜畦里播种。'],
+  perilla: ['作物', '可留种，也可加鲫鱼和粗盐炖汤。'],
+  perillaSoup: ['加工品', '用紫苏、鲫鱼和粗盐炖成的一碗汤。'],
 } as const satisfies Record<Item | Tool, readonly [string, string]>;
 
 export const HOTBAR_COLUMNS = 8;
@@ -76,6 +84,7 @@ export const CROPS = {
   radish: { seed: 'seeds', seedYield: 2, pickle: 'pickle', art: 'cherry-radish', stages: [35, 90, 180, 300], middleLabel: '根部膨大' },
   pakChoi: { seed: 'pakChoiSeeds', seedYield: 2, pickle: 'pakChoiPickle', art: 'pak-choi', stages: [45, 110, 230, 360], middleLabel: '叶丛展开' },
   mustard: { seed: 'mustardSeeds', seedYield: 2, pickle: 'mustardPickle', art: 'mustard', stages: [40, 95, 200, 320], middleLabel: '锯齿叶展开' },
+  perilla: { seed: 'perillaSeeds', seedYield: 2, art: 'perilla', stages: [45, 120, 250, 380], middleLabel: '对生叶展开' },
 } as const satisfies Record<string, {
   seed: Item; seedYield: number; pickle?: Item; art: string; stages: readonly [number, number, number, number]; middleLabel: string;
 }>;
@@ -94,6 +103,7 @@ export interface Recipe<Collected extends Item = EntryId> {
   anchors?: readonly { input: Item; entry: Collected }[];
   outputEntry?: Collected;
   requiresArchive?: boolean;
+  requiresTrace?: TraceId;
 }
 export const RECIPES = {
   salt: {
@@ -119,6 +129,12 @@ export const RECIPES = {
   mustardPickle: {
     label: '腌芥菜', station: 'jar', inputs: { mustard: 1, salt: 3 }, output: 'mustardPickle', outputQuantity: 1,
     duration: 75, timedInputs: ['mustard'], anchors: [{ input: 'mustard', entry: 'mustard' }], outputEntry: 'mustardPickle',
+    requiresTrace: 'mustard',
+  },
+  perillaSoup: {
+    label: '炖紫苏鲫鱼汤', station: 'kiln', inputs: { perilla: 1, crucian: 1, salt: 1 }, output: 'perillaSoup', outputQuantity: 1,
+    duration: 60, timedInputs: ['perilla'], anchors: [{ input: 'perilla', entry: 'perilla' }], outputEntry: 'perillaSoup',
+    requiresTrace: 'perilla',
   },
 } as const satisfies Record<string, Recipe<Item>>;
 export type RecipeId = keyof typeof RECIPES;
@@ -138,6 +154,11 @@ export const ENTRIES = {
     section: '草木册', reward: 55, duration: 480,
     clue: '霾天去旧制盐台西侧寻找余绪，带回田记所复原种子。',
     use: `用腌菜缸把芥菜 ×${RECIPES.mustardPickle.inputs.mustard} 和粗盐 ×${RECIPES.mustardPickle.inputs.salt} 腌成盐渍芥菜。`,
+  },
+  perilla: {
+    section: '草木册', reward: 60, duration: 480,
+    clue: '去南山道路碑东边找石阶药圃。霾天或每日 18:00 后可采到紫苏余绪。',
+    use: '用一份紫苏、一条鲫鱼和一份粗盐，在盐灶炖成紫苏鲫鱼汤。',
   },
   rockSalt: {
     section: '矿物册', reward: 45, duration: 720,
@@ -179,6 +200,11 @@ export const ENTRIES = {
     clue: '在腌菜缸中用粗盐腌制芥菜。',
     use: '把鲜芥菜用盐腌住，便于保存。',
   },
+  perillaSoup: {
+    section: '加工品册', reward: 35, duration: 0,
+    clue: '复原紫苏、种植并收获后，在盐灶用紫苏、鲫鱼和粗盐炖汤。',
+    use: '紫苏和鲫鱼同炖，续上了石阶药圃旧时的一道用法。',
+  },
 } as const;
 export type EntryId = keyof typeof ENTRIES;
 
@@ -197,7 +223,22 @@ export const SOUTH_PASS = {
   bounds: { x: 0, y: LIUWAN_ROWS + 1, width: 15, height: 12 },
   returnGate: [5, 33] as Point,
   waystone: [8, 39] as Point,
+  herbTerrace: [11, 39] as Point,
 };
+export const TRACE_STATES = ['unfound', 'collected', 'restored'] as const;
+export const TRACES = {
+  mustard: {
+    item: 'mustardTrace', tile: [33, 5], place: '旧制盐台西侧', seedQuantity: 2, inSouthPass: false,
+  },
+  perilla: {
+    item: 'perillaTrace', tile: SOUTH_PASS.herbTerrace, place: '石阶药圃', seedQuantity: 2, inSouthPass: true, eveningHour: 18,
+  },
+} as const satisfies Partial<Record<CropId, {
+  item: Item; tile: Point; place: string; seedQuantity: number; inSouthPass: boolean; eveningHour?: number;
+}>>;
+export type TraceId = keyof typeof TRACES;
+export type TraceState = typeof TRACE_STATES[number];
+export const TRACE_IDS = Object.keys(TRACES) as TraceId[];
 export const WATER_CAPACITY = 5;
 export const TILL_HITS = 3;
 
@@ -251,7 +292,12 @@ export const RESOURCES: Record<string, Resource> = {
   'expansion-stone-c': { tile: [9, 23], actor: 'stone', item: 'stone', tool: 'pick', hits: 3, quantity: 2 },
   'expansion-stump-a': { tile: [6, 23], actor: 'stump', item: 'wood', tool: 'axe', hits: 4, quantity: 3 },
   'expansion-stump-b': { tile: [11, 23], actor: 'stump', item: 'wood', tool: 'axe', hits: 4, quantity: 3 },
+  'south-pass-west-oak': tree('oak', [3, 36]),
+  'south-pass-oak': tree('oak', [11, 35]),
+  'south-pass-terrace-oak': tree('oak', [12, 40]),
+  'south-pass-west-stone': { tile: [2, 39], actor: 'stone', item: 'stone', tool: 'pick', hits: 3, quantity: 2 },
+  'south-pass-stone': { tile: [12, 37], actor: 'stone', item: 'stone', tool: 'pick', hits: 3, quantity: 2 },
+  'south-pass-terrace-stone': { tile: [10, 40], actor: 'stone', item: 'stone', tool: 'pick', hits: 3, quantity: 2 },
 };
 
 export const SALT_RUIN: Point = [35, 5];
-export const MUSTARD_TRACE = { tile: [33, 5] as Point, seedQuantity: 2 } as const;
